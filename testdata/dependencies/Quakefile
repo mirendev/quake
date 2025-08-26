@@ -1,0 +1,157 @@
+# Task dependency examples for Quakefile
+# Note: Commas between dependencies are optional but recommended for readability
+
+# Simple dependency - clean before build
+task clean {
+    echo "Cleaning build artifacts..."
+    echo "rm -rf build/"
+    echo "Clean complete"
+}
+
+# Compile the source code
+task compile => clean {
+    echo "Compiling source code..."
+    echo "gcc -c src/*.c"
+    echo "Compilation complete"
+}
+
+# Link object files
+task link => compile {
+    echo "Linking object files..."
+    echo "gcc -o app *.o"
+    echo "Linking complete"
+}
+
+# Build the application
+task build => link {
+    echo "Build successful!"
+    echo "Executable: ./app"
+}
+
+# Run tests (multiple dependencies)
+task test => compile, test:prepare {
+    echo "Running tests..."
+    echo "All tests passed!"
+}
+
+namespace test {
+    task prepare {
+        echo "Preparing test environment..."
+        echo "Setting up test database"
+        echo "Loading test fixtures"
+    }
+}
+
+# Generate documentation
+task docs:generate {
+    echo "Generating API documentation..."
+    echo "Generating user guide..."
+    echo "Documentation generated"
+}
+
+# Check documentation
+task docs:check {
+    echo "Checking documentation for errors..."
+    echo "No errors found"
+}
+
+# Publish documentation (parallel dependencies)
+task docs:publish => docs:generate, docs:check {
+    echo "Publishing documentation..."
+    echo "Documentation published to website"
+}
+
+# Complex dependency chain
+task assets:compile {
+    echo "Compiling CSS and JavaScript..."
+    echo "Assets compiled"
+}
+
+task assets:minify => assets:compile {
+    echo "Minifying assets..."
+    echo "Assets minified"
+}
+
+task assets:upload => assets:minify {
+    echo "Uploading assets to CDN..."
+    echo "Assets uploaded"
+}
+
+# Deploy application
+task deploy => build, assets:upload, db:migrate {
+    echo "Deploying application..."
+    echo "Application deployed successfully!"
+}
+
+namespace db {
+    task migrate {
+        echo "Running database migrations..."
+        echo "Migrations complete"
+    }
+}
+
+# Dependencies with namespaces
+namespace server {
+    task stop {
+        echo "Stopping server..."
+        echo "Server stopped"
+    }
+    
+    task start => server:stop {
+        echo "Starting server..."
+        echo "Server started on port 8080"
+    }
+    
+    task restart => server:stop, build, server:start {
+        echo "Server restarted with new build"
+    }
+}
+
+# File dependencies (like Make)
+task output.txt => input.txt {
+    echo "Processing input.txt to create output.txt"
+    echo "cat input.txt | tr a-z A-Z > output.txt"
+}
+
+task process => output.txt {
+    echo "Processing output.txt..."
+    echo "File processed"
+}
+
+# Dependency order demonstration
+task step1 {
+    echo "Step 1: Initialize"
+}
+
+task step2 => step1 {
+    echo "Step 2: Configure"
+}
+
+task step3 => step2 {
+    echo "Step 3: Validate"
+}
+
+task step4 => step2, step3 {
+    echo "Step 4: Execute (depends on 2 and 3)"
+}
+
+task all => step4 {
+    echo "All steps completed"
+}
+
+# Tasks with arguments and dependencies
+task build_with_config(config) => clean {
+    echo "Building with config: $config"
+    echo "Configuration loaded from $config.yml"
+}
+
+task deploy_env(env) => build_with_config {
+    echo "Deploying to environment: $env"
+    # This would need to pass the config to build_with_config
+}
+
+# Task that depends on parameterized task
+task release(version) => test, build {
+    echo "Creating release $version"
+    echo "Tagging as v$version"
+}

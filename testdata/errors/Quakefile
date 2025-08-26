@@ -1,0 +1,205 @@
+# Error case examples for testing error handling
+
+# Circular dependency - direct
+task circular1 => circular2 {
+    echo "This creates a circular dependency"
+}
+
+task circular2 => circular1 {
+    echo "This completes the circle"
+}
+
+# Circular dependency - indirect
+task a => b {
+    echo "Task A"
+}
+
+task b => c {
+    echo "Task B"
+}
+
+task c => a {
+    echo "Task C - circular!"
+}
+
+# Missing dependency
+task missing_dep => nonexistent {
+    echo "This depends on a task that doesn't exist"
+}
+
+# Duplicate task definition
+task duplicate {
+    echo "First definition"
+}
+
+task duplicate {
+    echo "Second definition - should error"
+}
+
+# Invalid syntax - missing opening brace
+task invalid_syntax
+    echo "Missing opening brace"
+}
+
+# Invalid syntax - missing closing brace
+task unclosed {
+    echo "This task never closes"
+    echo "Still going..."
+
+# Invalid syntax - bad dependency syntax
+task bad_deps => {
+    echo "Missing dependency list"
+}
+
+task bad_deps2 => task1 task2 {
+    echo "Missing comma in dependency list"
+}
+
+# Invalid variable reference
+UNDEFINED_VAR = ${DOESNT_EXIST}
+
+task use_undefined {
+    echo "Using undefined: ${UNDEFINED_VAR}"
+}
+
+# Namespace errors
+namespace test {
+    # Duplicate task in namespace
+    task dup {
+        echo "First"
+    }
+    
+    task dup {
+        echo "Second - duplicate!"
+    }
+}
+
+# Invalid namespace nesting
+namespace outer {
+    namespace inner {
+        namespace too_deep {
+            namespace way_too_deep {
+                task nested {
+                    echo "Too deeply nested?"
+                }
+            }
+        }
+    }
+}
+
+# Self-dependency
+task self => self {
+    echo "I depend on myself!"
+}
+
+# Empty task name
+task {
+    echo "No name given"
+}
+
+# Invalid task name characters
+task "task-with-dashes" {
+    echo "Dashes might not be allowed"
+}
+
+task task.with.dots {
+    echo "Dots might not be allowed"
+}
+
+task 123numbers {
+    echo "Starting with numbers"
+}
+
+# Empty task body
+task empty_task {
+}
+
+# Conflicting namespace and task names
+task conflict {
+    echo "I'm a task"
+}
+
+namespace conflict {
+    task sub {
+        echo "I'm in a namespace with the same name as a task"
+    }
+}
+
+# Invalid environment variable usage
+task bad_env {
+    echo "Value: ${ENV[}"  # Unclosed bracket
+}
+
+# Command injection attempt (security test)
+task injection {
+    USER_INPUT = "; rm -rf /"
+    echo "Processing: ${USER_INPUT}"
+}
+
+# Infinite recursion in variable
+RECURSIVE = "prefix ${RECURSIVE} suffix"
+
+task recursive_var {
+    echo "${RECURSIVE}"
+}
+
+# Mixed dependency formats (commas are optional)
+task mixed_deps => clean, build namespace:task {
+    echo "Mixed dependency formats"
+}
+
+# File dependency on directory
+task output/ => input/ {
+    echo "Directories as file deps?"
+}
+
+# Multiple default tasks
+task default {
+    echo "First default"
+}
+
+task default {
+    echo "Second default - conflict!"
+}
+
+# Task without proper comment documentation
+task wrong_desc {
+    echo "Task with no comment above"
+}
+
+# Unclosed string
+task unclosed_string {
+    echo "This string never ends...
+}
+
+# Invalid shell command
+task invalid_shell {
+    ech "Typo in echo command"
+    nonexistent_command --flag
+}
+
+# Race condition test
+task write1 {
+    echo "data1" > shared.txt
+}
+
+task write2 {
+    echo "data2" > shared.txt
+}
+
+task race => write1, write2 {
+    cat shared.txt  # Which data will we see?
+}
+
+# Syntax error in shell script
+task shell_error {
+    if [ "$VAR" == "test" ] then  # Missing semicolon or newline
+        echo "Syntax error"
+    fi
+}
+
+# Invalid variable assignment
+task bad_assignment {
+    VAR == "value"  # Double equals instead of single
+    echo "${VAR}"
+}

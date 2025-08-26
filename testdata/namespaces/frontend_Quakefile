@@ -1,0 +1,95 @@
+# Frontend namespace - all tasks are under "frontend" namespace
+namespace frontend
+
+# Install frontend dependencies
+task install {
+    echo "Installing frontend dependencies..."
+    echo "npm install"
+    echo "Dependencies installed"
+}
+
+# Build frontend assets
+task build => install {
+    echo "Building frontend assets..."
+    echo "Compiling TypeScript..."
+    echo "Bundling JavaScript..."
+    echo "Processing CSS..."
+    echo "Optimizing images..."
+    echo "Build complete: dist/"
+}
+
+# Start development server with hot reload
+task dev {
+    echo "Starting frontend dev server..."
+    echo "Webpack dev server running on http://localhost:3000"
+    echo "Watching for changes..."
+}
+
+# Run frontend tests
+task test {
+    echo "Running frontend tests..."
+    echo "Unit tests: 42 passed"
+    echo "Component tests: 18 passed"
+    echo "Integration tests: 7 passed"
+    echo "All tests passed"
+}
+
+# Run linting
+task lint {
+    echo "Linting frontend code..."
+    echo "ESLint: No errors found"
+    echo "Stylelint: No errors found"
+    echo "Prettier: All files formatted"
+}
+
+# Type checking
+task typecheck {
+    echo "Running TypeScript compiler..."
+    echo "No type errors found"
+}
+
+# Build for production
+task build:production => lint, typecheck, test {
+    echo "Building for production..."
+    echo "NODE_ENV=production"
+    echo "Minifying JavaScript..."
+    echo "Optimizing CSS..."
+    echo "Generating source maps..."
+    echo "Production build complete"
+}
+
+# Analyze bundle size
+task analyze {
+    echo "Analyzing bundle size..."
+    echo "Main bundle: 245kb (gzipped: 82kb)"
+    echo "Vendor bundle: 189kb (gzipped: 63kb)"
+    echo "CSS: 45kb (gzipped: 12kb)"
+}
+
+# Clean build artifacts
+task clean {
+    echo "Cleaning frontend build artifacts..."
+    echo "rm -rf dist/"
+    echo "rm -rf node_modules/.cache"
+    echo "Clean complete"
+}
+
+# Update snapshots for snapshot tests
+task test:update-snapshots {
+    echo "Updating test snapshots..."
+    echo "12 snapshots updated"
+}
+
+# Run end-to-end tests
+task e2e {
+    echo "Running end-to-end tests..."
+    echo "Starting test server..."
+    echo "Running Cypress tests..."
+    echo "All e2e tests passed"
+}
+
+# Serve production build locally
+task serve => build:production {
+    echo "Serving production build..."
+    echo "Server running at http://localhost:5000"
+}

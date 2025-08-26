@@ -1,0 +1,287 @@
+# Variable and environment examples for Quakefile
+
+# Global variables
+VERSION = "1.2.3"
+APP_NAME = "myapp"
+BUILD_DIR = "build"
+SRC_DIR = "src"
+TEST_DIR = "test"
+
+# Environment variable usage with env.X syntax
+DEPLOY_ENV = {{env.DEPLOY_ENV || "development"}}
+API_KEY = {{env.API_KEY || "default-key"}}
+
+# Simple variable interpolation with $VAR
+task info {
+    echo "Application: $APP_NAME"
+    echo "Version: $VERSION"
+    echo "Deploy Environment: $DEPLOY_ENV"
+    echo "Build Directory: $BUILD_DIR"
+}
+
+# Task with arguments
+task greet(name) {
+    echo "Hello, $name!"
+    echo "Welcome to $APP_NAME"
+}
+
+# Task with multiple arguments
+task deploy(environment, version) {
+    echo "Deploying $APP_NAME version $version to $environment"
+    echo "Using API key: $API_KEY"
+}
+
+# Task with optional arguments using expression syntax
+task build(target) {
+    TARGET = {{target || "release"}}
+    echo "Building $APP_NAME v$VERSION..."
+    echo "Build target: $TARGET"
+    echo "Source directory: $SRC_DIR"
+    echo "Output directory: $BUILD_DIR"
+    mkdir -p $BUILD_DIR
+    echo "Build complete"
+}
+
+# Command substitution
+GIT_COMMIT = `git rev-parse --short HEAD 2>/dev/null || echo "unknown"`
+BUILD_DATE = `date +%Y-%m-%d`
+BUILD_TIME = `date +%H:%M:%S`
+
+task version {
+    echo "Version: $VERSION"
+    echo "Commit: $GIT_COMMIT"
+    echo "Built: $BUILD_DATE $BUILD_TIME"
+}
+
+# Conditional variables
+DEBUG = {{env.DEBUG || "false"}}
+
+task compile(mode) {
+    MODE = {{mode || DEBUG}}
+    if [ "$MODE" = "true" ] || [ "$MODE" = "debug" ]; then
+        echo "Compiling with debug symbols..."
+        echo "gcc -g -O0 $SRC_DIR/*.c"
+    else
+        echo "Compiling with optimizations..."
+        echo "gcc -O2 $SRC_DIR/*.c"
+    fi
+}
+
+# Variables in namespaces with expressions
+namespace docker {
+    IMAGE_NAME = "$APP_NAME"
+    IMAGE_TAG = "{{VERSION}}-{{GIT_COMMIT}}"
+    REGISTRY = {{env.DOCKER_REGISTRY || "docker.io"}}
+    
+    task build {
+        echo "Building Docker image: $REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+        echo "docker build -t $REGISTRY/$IMAGE_NAME:$IMAGE_TAG ."
+    }
+    
+    task push(registry) {
+        REG = {{registry || REGISTRY}}
+        echo "Pushing image to $REG"
+        echo "docker push $REG/$IMAGE_NAME:$IMAGE_TAG"
+    }
+}
+
+# Dynamic variables (evaluated at runtime)
+namespace deploy {
+    TARGET = {{env.DEPLOY_TARGET || "staging"}}
+    
+    task info(target) {
+        DEPLOY_TO = {{target || TARGET}}
+        echo "Deploying to: $DEPLOY_TO"
+        case $DEPLOY_TO in
+            production)
+                echo "URL: https://app.example.com"
+                echo "Config: production.yml"
+                ;;
+            staging)
+                echo "URL: https://staging.example.com"
+                echo "Config: staging.yml"
+                ;;
+            *)
+                echo "URL: http://localhost:3000"
+                echo "Config: development.yml"
+                ;;
+        esac
+    }
+}
+
+# Arrays/lists (space-separated)
+FILES = "main.go utils.go config.go"
+PACKAGES = "fmt os io/ioutil"
+
+task check {
+    echo "Checking files:"
+    for file in $FILES; do
+        echo "  - ${file}"
+    done
+    
+    echo "Required packages:"
+    for pkg in $PACKAGES; do
+        echo "  - ${pkg}"
+    done
+}
+
+# Multi-line variables
+HELP_TEXT = """
+Usage: quake [options] [task] [args...]
+
+Options:
+  -f FILE    Use FILE as Quakefile
+  -h         Show this help
+  -v         Verbose output
+  -T         List available tasks
+
+Tasks:
+  build      Build the application
+  test       Run tests
+  deploy     Deploy to server
+
+Examples:
+  quake build debug
+  quake deploy staging v2.0.1
+  quake greet Alice
+"""
+
+task help {
+    echo "$HELP_TEXT"
+}
+
+# Platform-specific variables
+OS = `uname -s`
+ARCH = `uname -m`
+
+task platform(verbose) {
+    echo "Operating System: $OS"
+    echo "Architecture: $ARCH"
+    
+    if [ "{{verbose}}" = "true" ]; then
+        echo "Detailed info:"
+        uname -a
+    fi
+    
+    case $OS in
+        Darwin)
+            echo "Building for macOS..."
+            ;;
+        Linux)
+            echo "Building for Linux..."
+            ;;
+        *)
+            echo "Unsupported platform: $OS"
+            exit 1
+            ;;
+    esac
+}
+
+# Configuration file variables
+CONFIG_FILE = {{env.CONFIG || "config.yml"}}
+LOG_LEVEL = {{env.LOG_LEVEL || "info"}}
+
+task configure(config, level) {
+    CFG = {{config || CONFIG_FILE}}
+    LOG = {{level || LOG_LEVEL}}
+    
+    echo "Loading configuration from: $CFG"
+    echo "Log level: $LOG"
+    
+    if [ -f "$CFG" ]; then
+        echo "Configuration loaded"
+    else
+        echo "Warning: $CFG not found, using defaults"
+    fi
+}
+
+# Build flags
+CFLAGS = "-Wall -Wextra"
+LDFLAGS = "-lm -lpthread"
+
+task compile-c(optimization) {
+    OPT = {{optimization || "-O2"}}
+    echo "Compiling with CFLAGS: $CFLAGS $OPT"
+    echo "Linking with LDFLAGS: $LDFLAGS"
+    echo "gcc $CFLAGS $OPT -o $APP_NAME $SRC_DIR/*.c $LDFLAGS"
+}
+
+# Task that calls another task with arguments
+task release(version) {
+    echo "Creating release {{version}}"
+    # Would call: build release
+    # Would call: deploy production {{version}}
+    echo "Release {{version}} complete"
+}
+
+# Example of passing arguments between tasks
+task test(suite) {
+    SUITE = {{suite || "all"}}
+    echo "Running test suite: $SUITE"
+    
+    if [ "$SUITE" = "all" ] || [ "$SUITE" = "unit" ]; then
+        echo "Running unit tests..."
+    fi
+    
+    if [ "$SUITE" = "all" ] || [ "$SUITE" = "integration" ]; then
+        echo "Running integration tests..."
+    fi
+}
+
+# Complex expressions in variables
+task calculate {
+    # String concatenation
+    FULL_NAME = "{{APP_NAME}}-{{VERSION}}"
+    echo "Full name: $FULL_NAME"
+    
+    # Path joining
+    FULL_PATH = "{{BUILD_DIR}}/{{APP_NAME}}"
+    echo "Full path: $FULL_PATH"
+    
+    # Conditional expression
+    BUILD_TYPE = {{env.PRODUCTION == "true" ? "release" : "debug"}}
+    echo "Build type: $BUILD_TYPE"
+}
+
+# Multi-line string examples
+README_TEMPLATE = """
+# {{APP_NAME}}
+
+Version: {{VERSION}}
+Built: {{BUILD_DATE}}
+
+## Installation
+
+```bash
+curl -L https://github.com/example/{{APP_NAME}}/releases/download/v{{VERSION}}/{{APP_NAME}}-linux-amd64 -o {{APP_NAME}}
+chmod +x {{APP_NAME}}
+```
+
+## Usage
+
+Run `{{APP_NAME}} --help` for usage information.
+"""
+
+task generate_readme {
+    echo "$README_TEMPLATE" > README.md
+    echo "README.md generated"
+}
+
+# SQL query as multi-line string
+MIGRATION_SQL = """
+CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_username ON users(username);
+"""
+
+task create_migration {
+    echo "$MIGRATION_SQL" > migrations/001_create_users.sql
+    echo "Migration file created"
+}

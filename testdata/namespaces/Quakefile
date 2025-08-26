@@ -1,0 +1,146 @@
+# Namespace examples for Quakefile
+# 
+# Note: You can also use `namespace "name"` at the top of a file to put all
+# tasks in that file into a namespace. See api_Quakefile and frontend_Quakefile
+# for examples of file-level namespaces.
+
+# Database namespace
+namespace db {
+    # Run database migrations
+    task migrate {
+        echo "Running database migrations..."
+        echo "Migrating schema to latest version"
+        echo "Migrations complete"
+    }
+    
+    # Seed database with sample data
+    task seed {
+        echo "Seeding database..."
+        echo "Inserting sample users"
+        echo "Inserting sample posts"
+        echo "Seeding complete"
+    }
+    
+    # Reset database (drop and recreate)
+    task reset {
+        echo "Dropping database..."
+        echo "Creating database..."
+        echo "Database reset complete"
+    }
+    
+    # Backup database
+    task backup {
+        echo "Creating database backup..."
+        echo "Backup saved to: backup_$(date +%Y%m%d_%H%M%S).sql"
+    }
+}
+
+# Testing namespace
+namespace test {
+    # Run unit tests
+    task unit {
+        echo "Running unit tests..."
+        echo "Testing module A"
+        echo "Testing module B"
+        echo "All unit tests passed"
+    }
+    
+    # Run integration tests
+    task integration {
+        echo "Running integration tests..."
+        echo "Testing API endpoints"
+        echo "Testing database connections"
+        echo "All integration tests passed"
+    }
+    
+    # Run all tests
+    task all {
+        echo "Running all tests..."
+        echo "Unit tests: PASS"
+        echo "Integration tests: PASS"
+        echo "All tests completed successfully"
+    }
+    
+    # Nested namespace
+    namespace coverage {
+        # Generate test coverage report
+        task report {
+            echo "Generating coverage report..."
+            echo "Coverage: 85.3%"
+            echo "Report saved to coverage.html"
+        }
+        
+        # Check coverage threshold
+        task check {
+            echo "Checking coverage threshold..."
+            echo "Current: 85.3%"
+            echo "Required: 80%"
+            echo "✓ Coverage threshold met"
+        }
+    }
+}
+
+# Docker namespace
+namespace docker {
+    # Build Docker image
+    task build {
+        echo "Building Docker image..."
+        echo "docker build -t myapp:latest ."
+        echo "Image built successfully"
+    }
+    
+    # Push Docker image to registry
+    task push {
+        echo "Pushing Docker image..."
+        echo "docker push myapp:latest"
+        echo "Image pushed successfully"
+    }
+    
+    # Run Docker container
+    task run {
+        echo "Starting Docker container..."
+        echo "docker run -d -p 8080:8080 myapp:latest"
+        echo "Container started"
+    }
+    
+    namespace compose {
+        # Start services with docker-compose
+        task up {
+            echo "Starting docker-compose services..."
+            echo "docker-compose up -d"
+            echo "Services started"
+        }
+        
+        # Stop services
+        task down {
+            echo "Stopping docker-compose services..."
+            echo "docker-compose down"
+            echo "Services stopped"
+        }
+    }
+}
+
+# Development namespace
+namespace dev {
+    # Start development server
+    task server {
+        echo "Starting development server on http://localhost:3000"
+        echo "Watching for file changes..."
+        echo "Press Ctrl+C to stop"
+    }
+    
+    # Watch files for changes
+    task watch {
+        echo "Watching files for changes..."
+        echo "Rebuilding on change..."
+    }
+}
+
+# Setup everything
+task setup {
+    echo "Running full setup..."
+    # Should be able to call namespaced tasks
+    echo "Would call: db:migrate"
+    echo "Would call: db:seed"
+    echo "Setup complete"
+}

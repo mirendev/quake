@@ -1,0 +1,77 @@
+# Example of file-level namespace declaration
+# All tasks in this file are automatically in the "api" namespace
+
+namespace api
+
+# Start the API server
+task start {
+    echo "Starting API server on port 8080..."
+    echo "API server running"
+}
+
+# Stop the API server
+task stop {
+    echo "Stopping API server..."
+    echo "API server stopped"
+}
+
+# Restart the API server
+task restart => stop, start {
+    echo "API server restarted"
+}
+
+# Run API tests
+task test {
+    echo "Running API tests..."
+    echo "Testing GET endpoints"
+    echo "Testing POST endpoints"
+    echo "Testing authentication"
+    echo "All API tests passed"
+}
+
+# Generate API documentation
+task docs {
+    echo "Generating API documentation..."
+    echo "Scanning endpoints..."
+    echo "Building OpenAPI spec..."
+    echo "Documentation generated at docs/api.html"
+}
+
+# Check API health
+task health {
+    echo "Checking API health..."
+    curl -f http://localhost:8080/health || echo "API is not responding"
+}
+
+# Deploy API to staging
+task deploy:staging {
+    echo "Deploying API to staging..."
+    echo "Building container..."
+    echo "Pushing to registry..."
+    echo "Deploying to staging cluster..."
+    echo "API deployed to staging"
+}
+
+# Deploy API to production
+task deploy:production => test {
+    echo "Deploying API to production..."
+    echo "Running final tests..."
+    echo "Building production container..."
+    echo "Deploying with zero-downtime strategy..."
+    echo "API deployed to production"
+}
+
+# View API logs
+task logs {
+    echo "Tailing API logs..."
+    echo "[2024-01-01 12:00:00] INFO: Request received GET /users"
+    echo "[2024-01-01 12:00:01] INFO: Response sent 200 OK"
+}
+
+# Database migrations for API
+task migrate {
+    echo "Running API database migrations..."
+    echo "Applying migration: 001_create_users_table"
+    echo "Applying migration: 002_add_api_keys"
+    echo "Migrations complete"
+}

@@ -1,0 +1,74 @@
+# Basic Quakefile examples
+
+# Default task - runs when no task is specified
+task default {
+    echo "Running default task"
+    echo "This is the default action"
+}
+
+# Simple hello world task
+task hello {
+    echo "Hello, World!"
+}
+
+# Greet the current user (from environment)
+task greet {
+    echo "Hello, ${USER}!"
+    echo "Welcome to Quake"
+}
+
+# Greet a specific person (with argument)
+task greet_person(name) {
+    echo "Hello, $name!"
+    echo "Nice to meet you"
+}
+
+# Task with optional argument
+task goodbye(name) {
+    NAME = {{name || "friend"}}
+    echo "Goodbye, $NAME!"
+}
+
+# Task with multi-line commands
+task build {
+    echo "Starting build..."
+    echo "Compiling source files"
+    echo "Linking binaries"
+    echo "Build complete!"
+}
+
+# Task that shows current directory
+task pwd {
+    pwd
+    ls -la
+}
+
+# Task that fails (for testing error handling)
+task fail {
+    echo "This task will fail"
+    exit 1
+}
+
+# Task with shell features
+task shell_features {
+    # Comments in shell
+    for i in 1 2 3; do
+        echo "Count: $i"
+    done
+    
+    if [ -f "Quakefile" ]; then
+        echo "Quakefile exists"
+    fi
+}
+
+# Silent task (output suppression with @)
+task silent {
+    @echo "This line won't show the command"
+    echo "But this one will"
+}
+
+# Task that continues on error (with -)
+task continue_on_error {
+    -false
+    echo "This runs even though false failed"
+}

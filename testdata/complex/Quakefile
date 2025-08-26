@@ -1,0 +1,354 @@
+# Complex real-world example: Go project build system
+
+# Project configuration
+PROJECT = "github.com/example/myapp"
+BINARY = "myapp"
+VERSION = `git describe --tags --always --dirty 2>/dev/null || echo "dev"`
+BUILD_TIME = `date -u +"%Y-%m-%dT%H:%M:%SZ"`
+GIT_COMMIT = `git rev-parse HEAD 2>/dev/null || echo "unknown"`
+GO_VERSION = `go version | cut -d' ' -f3`
+
+# Build flags
+LDFLAGS = "-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT"
+GOFLAGS = "-v"
+CGO_ENABLED = "0"
+
+# Directories
+BUILD_DIR = "build"
+DIST_DIR = "dist"
+COVERAGE_DIR = "coverage"
+
+# Default task
+task default => build
+
+# Display version information
+task version {
+    echo "Application: $BINARY"
+    echo "Version: $VERSION"
+    echo "Git Commit: $GIT_COMMIT"
+    echo "Build Time: $BUILD_TIME"
+    echo "Go Version: $GO_VERSION"
+}
+
+# Install dependencies
+task deps {
+    echo "Installing dependencies..."
+    go mod download
+    go mod tidy
+    echo "Dependencies installed"
+}
+
+# Run go fmt on all source files
+task fmt {
+    echo "Formatting Go source files..."
+    go fmt ./...
+    echo "Formatting complete"
+}
+
+# Run linters
+task lint => fmt {
+    echo "Running linters..."
+    
+    # Check if golangci-lint is installed
+    if command -v golangci-lint >/dev/null 2>&1; then
+        golangci-lint run ./...
+    else
+        echo "golangci-lint not found, running basic checks..."
+        go vet ./...
+    fi
+    
+    echo "Linting complete"
+}
+
+# Run tests
+task test => deps {
+    echo "Running tests..."
+    go test -v -race -coverprofile=coverage.out ./...
+    echo "Tests complete"
+}
+
+# Run tests with coverage report
+task test:coverage => test {
+    echo "Generating coverage report..."
+    mkdir -p $COVERAGE_DIR
+    go tool cover -html=coverage.out -o $COVERAGE_DIR/coverage.html
+    go tool cover -func=coverage.out
+    echo "Coverage report saved to $COVERAGE_DIR/coverage.html"
+}
+
+# Run benchmarks
+task bench {
+    echo "Running benchmarks..."
+    go test -bench=. -benchmem ./...
+    echo "Benchmarks complete"
+}
+
+# Generate mocks
+task generate {
+    echo "Generating code..."
+    go generate ./...
+    echo "Code generation complete"
+}
+
+# Build the application
+task build => deps, generate, lint {
+    echo "Building $BINARY..."
+    mkdir -p $BUILD_DIR
+    
+    CGO_ENABLED=$CGO_ENABLED go build $GOFLAGS \
+        -ldflags "$LDFLAGS" \
+        -o $BUILD_DIR/$BINARY \
+        ./cmd/$BINARY
+    
+    echo "Build complete: $BUILD_DIR/$BINARY"
+    ls -lh $BUILD_DIR/$BINARY
+}
+
+# Build for multiple platforms
+task build:all => deps {
+    echo "Building for multiple platforms..."
+    mkdir -p $DIST_DIR
+    
+    # Build matrix
+    for os in linux darwin windows; do
+        for arch in amd64 arm64; do
+            output="$DIST_DIR/$BINARY-$VERSION-${os}-${arch}"
+            if [ "$os" = "windows" ]; then
+                output="${output}.exe"
+            fi
+            
+            echo "Building for ${os}/${arch}..."
+            GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 \
+                go build -ldflags "$LDFLAGS" \
+                -o ${output} \
+                ./cmd/$BINARY
+        done
+    done
+    
+    echo "Multi-platform build complete"
+    ls -lh $DIST_DIR/
+}
+
+# Create release archives
+task dist => build:all {
+    echo "Creating release archives..."
+    cd $DIST_DIR
+    
+    for file in $BINARY-*; do
+        if [[ "$file" == *.exe ]]; then
+            zip "${file%.exe}.zip" "$file"
+            echo "Created ${file%.exe}.zip"
+        else
+            tar czf "${file}.tar.gz" "$file"
+            echo "Created ${file}.tar.gz"
+        fi
+    done
+    
+    # Generate checksums
+    shasum -a 256 *.tar.gz *.zip > checksums.txt
+    echo "Generated checksums.txt"
+    
+    cd -
+    echo "Release archives created in $DIST_DIR/"
+}
+
+# Run the application
+task run => build {
+    echo "Running $BINARY..."
+    $BUILD_DIR/$BINARY
+}
+
+# Run with hot reload
+task watch {
+    echo "Starting with hot reload..."
+    
+    if command -v air >/dev/null 2>&1; then
+        air
+    elif command -v reflex >/dev/null 2>&1; then
+        reflex -r '\.go$' -s -- sh -c 'go run ./cmd/$BINARY'
+    else
+        echo "No hot reload tool found (air or reflex)"
+        echo "Install with: go install github.com/cosmtrek/air@latest"
+        exit 1
+    fi
+}
+
+# Clean build artifacts
+task clean {
+    echo "Cleaning build artifacts..."
+    rm -rf $BUILD_DIR
+    rm -rf $DIST_DIR
+    rm -rf $COVERAGE_DIR
+    rm -f coverage.out
+    go clean -cache
+    echo "Clean complete"
+}
+
+# Run security scan
+task security {
+    echo "Running security scan..."
+    
+    if command -v gosec >/dev/null 2>&1; then
+        gosec ./...
+    else
+        echo "gosec not found, install with: go install github.com/securego/gosec/v2/cmd/gosec@latest"
+    fi
+    
+    echo "Checking for vulnerabilities..."
+    go list -json -deps ./... | nancy sleuth
+}
+
+# Update dependencies
+task deps:update {
+    echo "Updating dependencies..."
+    go get -u ./...
+    go mod tidy
+    echo "Dependencies updated"
+}
+
+# Vendor dependencies
+task vendor => deps {
+    echo "Vendoring dependencies..."
+    go mod vendor
+    echo "Dependencies vendored"
+}
+
+# Docker tasks
+namespace docker {
+    IMAGE = "$BINARY"
+    TAG = "$VERSION"
+    DOCKERFILE = "Dockerfile"
+    
+    # Build Docker image
+    task build => build {
+        echo "Building Docker image $IMAGE:$TAG..."
+        docker build -f $DOCKERFILE -t $IMAGE:$TAG .
+        docker tag $IMAGE:$TAG $IMAGE:latest
+        echo "Docker image built"
+    }
+    
+    # Run Docker container
+    task run => docker:build {
+        echo "Running Docker container..."
+        docker run --rm -it $IMAGE:$TAG
+    }
+    
+    # Push Docker image
+    task push => docker:build {
+        echo "Pushing Docker image..."
+        docker push $IMAGE:$TAG
+        docker push $IMAGE:latest
+        echo "Docker image pushed"
+    }
+}
+
+# Database tasks
+namespace db {
+    DB_NAME = {{env.DB_NAME || "myapp_dev"}}
+    DB_USER = {{env.DB_USER || "postgres"}}
+    DB_HOST = {{env.DB_HOST || "localhost"}}
+    
+    # Create database
+    task create {
+        echo "Creating database $DB_NAME..."
+        createdb -h $DB_HOST -U $DB_USER $DB_NAME
+        echo "Database created"
+    }
+    
+    # Drop database
+    task drop {
+        echo "Dropping database $DB_NAME..."
+        dropdb -h $DB_HOST -U $DB_USER $DB_NAME
+        echo "Database dropped"
+    }
+    
+    # Run migrations
+    task migrate {
+        echo "Running database migrations..."
+        go run ./cmd/migrate up
+        echo "Migrations complete"
+    }
+    
+    # Rollback migrations
+    task rollback {
+        echo "Rolling back last migration..."
+        go run ./cmd/migrate down 1
+        echo "Rollback complete"
+    }
+    
+    # Seed database
+    task seed => migrate {
+        echo "Seeding database..."
+        go run ./cmd/seed
+        echo "Database seeded"
+    }
+}
+
+# CI/CD tasks
+namespace ci {
+    # Run CI pipeline
+    task all => deps, lint, test, build {
+        echo "CI pipeline complete"
+    }
+    
+    # Run pre-commit checks
+    task precommit => fmt, lint, test {
+        echo "Pre-commit checks passed"
+    }
+}
+
+# Create a new release
+task release => test, build:all, dist {
+    echo "Release $VERSION prepared"
+    echo "Archives ready in $DIST_DIR/"
+    echo ""
+    echo "Next steps:"
+    echo "  1. git tag -a v$VERSION -m 'Release v$VERSION'"
+    echo "  2. git push origin v$VERSION"
+    echo "  3. Upload archives from $DIST_DIR/ to GitHub releases"
+}
+
+# Setup development environment
+task setup {
+    echo "Setting up development environment..."
+    
+    # Install tools
+    echo "Installing development tools..."
+    go install github.com/cosmtrek/air@latest
+    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    go install github.com/securego/gosec/v2/cmd/gosec@latest
+    
+    # Install dependencies
+    go mod download
+    
+    # Setup git hooks
+    if [ -d ".git" ]; then
+        echo "Setting up git hooks..."
+        echo "#!/bin/sh" > .git/hooks/pre-commit
+        echo "quake ci:precommit" >> .git/hooks/pre-commit
+        chmod +x .git/hooks/pre-commit
+    fi
+    
+    echo "Development environment ready"
+}
+
+# Show available tasks
+task help {
+    echo "Quake - Task Runner for $BINARY"
+    echo ""
+    echo "Usage: quake [task]"
+    echo ""
+    echo "Available tasks:"
+    echo "  build          - Build the application"
+    echo "  test           - Run tests"
+    echo "  lint           - Run linters"
+    echo "  fmt            - Format code"
+    echo "  run            - Run the application"
+    echo "  watch          - Run with hot reload"
+    echo "  clean          - Clean build artifacts"
+    echo "  release        - Create a release"
+    echo "  docker:build   - Build Docker image"
+    echo "  db:migrate     - Run database migrations"
+    echo ""
+    echo "Run 'quake -T' to see all available tasks"
+}
