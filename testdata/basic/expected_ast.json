@@ -1,0 +1,15 @@
+{
+  "tasks": [
+    {
+      "name": "default",
+      "commands": [
+        {
+          "line": "echo \"Running default task\""
+        },
+        {
+          "line": "echo \"This is the default action\""
+        }
+      ]
+    }
+  ]
+}
