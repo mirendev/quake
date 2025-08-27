@@ -61,6 +61,8 @@ func TestParseHelloTask(t *testing.T) {
 				},
 			},
 		},
+		Namespaces: []Namespace{},
+		Variables:  []Variable{},
 	}
 
 	require.Equal(t, expected, result)
@@ -88,6 +90,8 @@ func TestParseGreetPersonTask(t *testing.T) {
 				},
 			},
 		},
+		Namespaces: []Namespace{},
+		Variables:  []Variable{},
 	}
 
 	require.Equal(t, expected, result)

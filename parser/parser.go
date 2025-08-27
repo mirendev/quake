@@ -6,11 +6,542 @@ import (
 	p "github.com/lab47/peggysue"
 )
 
+// Grammar holds all the parsing rules
+type Grammar struct {
+	quakeFile              p.Rule
+	topLevelElement        p.Rule
+	comment                p.Rule
+	fileNamespaceDirective p.Rule
+	variable               p.Rule
+	multilineStringVar     p.Rule
+	simpleVariable         p.Rule
+	variableValue          p.Rule
+	commandSubstitution    p.Rule
+	expressionValue        p.Rule
+	quotedString           p.Rule
+	task                   p.Rule
+	taskSimple             p.Rule
+	taskWithArgs           p.Rule
+	taskWithDeps           p.Rule
+	taskWithArgsAndDeps    p.Rule
+	namespace              p.Rule
+	namespaceRef           p.Rule
+	argList                p.Rule
+	dependencies           p.Rule
+	word                   p.Rule
+	ws                     p.Rule
+	requiredSpace          p.Rule
+	content                p.Rule
+	balancedBraceContent   p.Rule
+}
+
+// NewGrammar creates and initializes a new grammar
+func NewGrammar() *Grammar {
+	g := &Grammar{}
+	g.init()
+	return g
+}
+
+// init initializes all the grammar rules
+func (g *Grammar) init() {
+	// Create references first
+	namespaceRef := p.R("namespace")
+	g.namespaceRef = namespaceRef
+	balancedRef := p.R("balancedContent")
+
+	// Define basic rules
+	g.ws = p.Star(p.Or(
+		p.S(" "),
+		p.S("\t"),
+		p.S("\n"),
+		p.S("\r"),
+	))
+
+	g.requiredSpace = p.Plus(p.Or(
+		p.S(" "),
+		p.S("\t"),
+	))
+
+	g.word = p.Transform(
+		p.Plus(p.Or(
+			p.Range('a', 'z'),
+			p.Range('A', 'Z'),
+			p.Range('0', '9'),
+			p.S("_"),
+		)),
+		func(s string) any {
+			return s
+		},
+	)
+
+	// Define content parsing with balanced braces
+	balancedRule := p.Star(p.Or(
+		// Double quoted string
+		p.Seq(
+			p.S("\""),
+			p.Star(p.Or(
+				p.S("\\\""),
+				p.S("\\\\"),
+				p.Seq(p.Not(p.S("\"")), p.Any()),
+			)),
+			p.S("\""),
+		),
+		// Single quoted string
+		p.Seq(
+			p.S("'"),
+			p.Star(p.Or(
+				p.S("\\'"),
+				p.S("\\\\"),
+				p.Seq(p.Not(p.S("'")), p.Any()),
+			)),
+			p.S("'"),
+		),
+		// Nested braces
+		p.Seq(
+			p.S("{"),
+			balancedRef,
+			p.S("}"),
+		),
+		// Regular character that's not a closing brace
+		p.Seq(p.Not(p.S("}")), p.Any()),
+	))
+	balancedRef.Set(balancedRule)
+	g.balancedBraceContent = balancedRule
+
+	g.content = p.Transform(
+		g.balancedBraceContent,
+		func(s string) any {
+			return s
+		},
+	)
+
+	// Define comment
+	g.comment = p.Action(
+		p.Seq(
+			p.S("#"),
+			p.Star(p.Seq(p.Not(p.S("\n")), p.Any())),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			return nil // Comments are ignored
+		},
+	)
+
+	// Define file namespace directive (unquoted, no opening brace)
+	g.fileNamespaceDirective = p.Action(
+		p.Seq(
+			p.S("namespace"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			return FileNamespaceDirective{Name: v.Get("name").(string)}
+		},
+	)
+
+	// Define variable parsing rules
+	g.quotedString = p.Transform(
+		p.Seq(
+			p.S("\""),
+			p.Star(p.Or(
+				p.S("\\\""),
+				p.S("\\\\"),
+				p.Seq(p.Not(p.S("\"")), p.Any()),
+			)),
+			p.S("\""),
+		),
+		func(s string) any { return s },
+	)
+
+	g.commandSubstitution = p.Action(
+		p.Seq(
+			p.S("`"),
+			p.Named("cmd", p.Transform(
+				p.Star(p.Seq(p.Not(p.S("`")), p.Any())),
+				func(s string) any { return s },
+			)),
+			p.S("`"),
+		),
+		func(v p.Values) any {
+			return Variable{
+				Value:               "`" + v.Get("cmd").(string) + "`",
+				CommandSubstitution: true,
+			}
+		},
+	)
+
+	g.expressionValue = p.Action(
+		p.Seq(
+			p.S("{{"),
+			p.Named("expr", p.Transform(
+				p.Star(p.Seq(p.Not(p.S("}}")), p.Any())),
+				func(s string) any { return s },
+			)),
+			p.S("}}"),
+		),
+		func(v p.Values) any {
+			return Variable{
+				Value:        "{{" + v.Get("expr").(string) + "}}",
+				IsExpression: true,
+			}
+		},
+	)
+
+	g.variableValue = p.Or(
+		g.commandSubstitution,
+		g.expressionValue,
+		g.quotedString,
+	)
+
+	g.multilineStringVar = p.Action(
+		p.Seq(
+			p.Named("name", g.word),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.S("="),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.S("\"\"\""),
+			p.Or(p.S("\n"), p.EOS()),
+			p.Named("content", p.Transform(
+				p.Star(p.Seq(
+					p.Not(p.S("\"\"\"")),
+					p.Any(),
+				)),
+				func(s string) any { return s },
+			)),
+			p.S("\"\"\""),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			return Variable{
+				Name:        v.Get("name").(string),
+				Value:       v.Get("content").(string),
+				IsMultiline: true,
+			}
+		},
+	)
+
+	g.simpleVariable = p.Action(
+		p.Seq(
+			p.Named("name", g.word),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.S("="),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Named("value", g.variableValue),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			value := v.Get("value")
+			switch val := value.(type) {
+			case Variable:
+				val.Name = v.Get("name").(string)
+				return val
+			default:
+				return Variable{
+					Name:  v.Get("name").(string),
+					Value: val.(string),
+				}
+			}
+		},
+	)
+
+	g.variable = p.Or(
+		g.multilineStringVar,
+		g.simpleVariable,
+	)
+
+	// Define argument and dependency parsing
+	g.argList = p.Transform(
+		p.Star(p.Seq(
+			p.Not(p.S(")")),
+			p.Any(),
+		)),
+		func(s string) any {
+			return parseArgumentsFromString(s)
+		},
+	)
+
+	g.dependencies = p.Transform(
+		p.Star(p.Seq(
+			p.Not(p.S("{")),
+			p.Any(),
+		)),
+		func(s string) any {
+			return parseDependenciesFromString(s)
+		},
+	)
+
+	// Define task parsing rules
+	g.taskSimple = p.Action(
+		p.Seq(
+			p.S("task"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			g.ws,
+			p.S("{"),
+			p.Named("content", g.content),
+			p.S("}"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			content := v.Get("content").(string)
+			commands := parseCommands(content)
+
+			return Task{
+				Name:     name,
+				Commands: commands,
+			}
+		},
+	)
+
+	g.taskWithArgs = p.Action(
+		p.Seq(
+			p.S("task"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			p.S("("),
+			p.Named("args", g.argList),
+			p.S(")"),
+			g.ws,
+			p.S("{"),
+			p.Named("content", g.content),
+			p.S("}"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			args := v.Get("args").([]string)
+			content := v.Get("content").(string)
+			commands := parseCommands(content)
+
+			return Task{
+				Name:      name,
+				Arguments: args,
+				Commands:  commands,
+			}
+		},
+	)
+
+	g.taskWithDeps = p.Action(
+		p.Seq(
+			p.S("task"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			g.ws,
+			p.S("=>"),
+			g.ws,
+			p.Named("deps", g.dependencies),
+			g.ws,
+			p.S("{"),
+			p.Named("content", g.content),
+			p.S("}"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			deps := v.Get("deps").([]string)
+			content := v.Get("content").(string)
+			commands := parseCommands(content)
+
+			return Task{
+				Name:         name,
+				Dependencies: deps,
+				Commands:     commands,
+			}
+		},
+	)
+
+	g.taskWithArgsAndDeps = p.Action(
+		p.Seq(
+			p.S("task"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			p.S("("),
+			p.Named("args", g.argList),
+			p.S(")"),
+			g.ws,
+			p.S("=>"),
+			g.ws,
+			p.Named("deps", g.dependencies),
+			g.ws,
+			p.S("{"),
+			p.Named("content", g.content),
+			p.S("}"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			args := v.Get("args").([]string)
+			deps := v.Get("deps").([]string)
+			content := v.Get("content").(string)
+			commands := parseCommands(content)
+
+			return Task{
+				Name:         name,
+				Arguments:    args,
+				Dependencies: deps,
+				Commands:     commands,
+			}
+		},
+	)
+
+	g.task = p.Or(
+		g.taskWithArgsAndDeps,
+		g.taskWithDeps,
+		g.taskWithArgs,
+		g.taskSimple,
+	)
+
+	// Define namespace rule
+	namespaceRule := p.Action(
+		p.Seq(
+			p.S("namespace"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			g.ws,
+			p.S("{"),
+			p.Named("elements", p.Many(p.Action(
+				p.Seq(
+					g.ws,
+					p.Named("element", p.Or(
+						g.comment,
+						g.variable,
+						g.task,
+						g.namespaceRef,
+					)),
+				),
+				func(v p.Values) any {
+					return v.Get("element")
+				},
+			), 0, -1, func(values []any) any {
+				return values
+			})),
+			p.S("}"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			ns := Namespace{
+				Name:       name,
+				Tasks:      []Task{},
+				Variables:  []Variable{},
+				Namespaces: []Namespace{},
+			}
+
+			elements := v.Get("elements")
+			if elements != nil {
+				for _, elem := range elements.([]any) {
+					if elem == nil {
+						continue
+					}
+					switch e := elem.(type) {
+					case Task:
+						ns.Tasks = append(ns.Tasks, e)
+					case Variable:
+						ns.Variables = append(ns.Variables, e)
+					case Namespace:
+						ns.Namespaces = append(ns.Namespaces, e)
+					}
+				}
+			}
+
+			return ns
+		},
+	)
+	// Set the reference using type assertion
+	if ref, ok := namespaceRef.(interface{ Set(p.Rule) }); ok {
+		ref.Set(namespaceRule)
+	}
+	g.namespace = namespaceRule
+
+	// Define top-level element
+	g.topLevelElement = p.Action(
+		p.Seq(
+			g.ws,
+			p.Named("element", p.Or(
+				g.comment,
+				g.fileNamespaceDirective,
+				g.variable,
+				g.task,
+				g.namespace,
+			)),
+		),
+		func(v p.Values) any {
+			return v.Get("element")
+		},
+	)
+
+	// Define the main Quakefile rule
+	g.quakeFile = p.Action(
+		p.Seq(
+			p.Named("elements", p.Many(g.topLevelElement, 0, -1, func(values []any) any {
+				return values
+			})),
+			g.ws,
+			p.EOS(),
+		),
+		func(v p.Values) any {
+			qf := QuakeFile{
+				Tasks:      []Task{},
+				Namespaces: []Namespace{},
+				Variables:  []Variable{},
+			}
+
+			elements := v.Get("elements")
+			// Debug: check what type elements is
+			if elements != nil {
+				// Try to handle it as a slice
+				switch elems := elements.(type) {
+				case []any:
+					for _, elem := range elems {
+						if elem == nil {
+							continue
+						}
+						switch e := elem.(type) {
+						case Task:
+							qf.Tasks = append(qf.Tasks, e)
+						case Namespace:
+							qf.Namespaces = append(qf.Namespaces, e)
+						case Variable:
+							qf.Variables = append(qf.Variables, e)
+						case FileNamespaceDirective:
+							qf.FileNamespace = e.Name
+						}
+					}
+				default:
+					// Single element?
+					switch e := elements.(type) {
+					case Task:
+						qf.Tasks = append(qf.Tasks, e)
+					case Namespace:
+						qf.Namespaces = append(qf.Namespaces, e)
+					case Variable:
+						qf.Variables = append(qf.Variables, e)
+					case FileNamespaceDirective:
+						qf.FileNamespace = e.Name
+					}
+				}
+			}
+
+			return qf
+		},
+	)
+}
+
 // ParseQuakefile parses a Quakefile string and returns the AST
 func ParseQuakefile(input string) (QuakeFile, bool, error) {
 	parser := p.New()
-	grammar := buildGrammar()
-	result, ok, err := parser.Parse(grammar, input)
+	grammar := NewGrammar()
+	result, ok, err := parser.Parse(grammar.quakeFile, input, p.WithErrors())
 
 	if !ok || err != nil {
 		return QuakeFile{}, ok, err
@@ -23,188 +554,9 @@ func ParseQuakefile(input string) (QuakeFile, bool, error) {
 	return result.(QuakeFile), true, nil
 }
 
-func buildGrammar() p.Rule {
-	return p.Or(
-		parseFileWithBlockNamespace(),
-		parseFileWithFileNamespace(),
-		parseTaskWithArgsAndDeps(),
-		parseTaskWithDepsOnly(),
-		parseTaskWithArgs(),
-		parseTaskNoArgs(),
-		parseEmptyFile(),
-	)
-}
-
-func parseEmptyFile() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			return QuakeFile{Tasks: []Task{}}
-		},
-	)
-}
-
-func parseTaskNoArgs() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.S("task"),
-			requiredSpace(),
-			p.Named("name", parseWord()),
-			ws(),
-			p.S("{"),
-			p.Named("content", parseContent()),
-			p.S("}"),
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			name := v.Get("name").(string)
-			content := v.Get("content").(string)
-
-			commands := parseCommands(content)
-
-			task := Task{
-				Name:     name,
-				Commands: commands,
-			}
-
-			return QuakeFile{Tasks: []Task{task}}
-		},
-	)
-}
-
-func parseTaskWithArgs() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.S("task"),
-			requiredSpace(),
-			p.Named("name", parseWord()),
-			p.S("("),
-			p.Named("args", parseArgList()),
-			p.S(")"),
-			ws(),
-			p.S("{"),
-			p.Named("content", parseContent()),
-			p.S("}"),
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			name := v.Get("name").(string)
-			args := v.Get("args").([]string)
-			content := v.Get("content").(string)
-
-			commands := parseCommands(content)
-
-			task := Task{
-				Name:      name,
-				Arguments: args,
-				Commands:  commands,
-			}
-
-			return QuakeFile{Tasks: []Task{task}}
-		},
-	)
-}
-
-func parseArgList() p.Rule {
-	return p.Transform(
-		p.Star(p.Seq(
-			p.Not(p.S(")")), // not a closing paren
-			p.Any(),         // any character
-		)),
-		func(s string) any {
-			return parseArgumentsFromString(s)
-		},
-	)
-}
-
-// ws matches optional whitespace (spaces, tabs, newlines)
-func ws() p.Rule {
-	return p.Star(p.Or(
-		p.S(" "),
-		p.S("\t"),
-		p.S("\n"),
-		p.S("\r"),
-	))
-}
-
-// requiredSpace matches one or more spaces/tabs (not newlines)
-func requiredSpace() p.Rule {
-	return p.Plus(p.Or(
-		p.S(" "),
-		p.S("\t"),
-	))
-}
-
-func parseWord() p.Rule {
-	return p.Transform(
-		p.Plus(p.Or(
-			p.Range('a', 'z'),
-			p.Range('A', 'Z'),
-			p.Range('0', '9'),
-			p.S("_"),
-		)),
-		func(s string) any {
-			return s
-		},
-	)
-}
-
-func parseContent() p.Rule {
-	return p.Transform(
-		parseBalancedBraceContent(),
-		func(s string) any {
-			return s
-		},
-	)
-}
-
-// parseBalancedBraceContent parses content until a matching closing brace, respecting quotes
-func parseBalancedBraceContent() p.Rule {
-	// First create a reference for recursive parsing
-	ref := p.R("balancedContent")
-
-	rule := p.Star(p.Or(
-		// Double quoted string - consume entire quoted content including any braces inside
-		p.Seq(
-			p.S("\""),
-			p.Star(p.Or(
-				p.S("\\\""),                      // escaped quote
-				p.S("\\\\"),                      // escaped backslash
-				p.Seq(p.Not(p.S("\"")), p.Any()), // any other char
-			)),
-			p.S("\""),
-		),
-		// Single quoted string - consume entire quoted content including any braces inside
-		p.Seq(
-			p.S("'"),
-			p.Star(p.Or(
-				p.S("\\'"),                      // escaped quote
-				p.S("\\\\"),                     // escaped backslash
-				p.Seq(p.Not(p.S("'")), p.Any()), // any other char
-			)),
-			p.S("'"),
-		),
-		// Nested braces (outside quotes) - use reference for recursion
-		p.Seq(
-			p.S("{"),
-			ref,
-			p.S("}"),
-		),
-		// Regular character that's not a closing brace (outside quotes)
-		p.Seq(p.Not(p.S("}")), p.Any()),
-	))
-
-	// Now set the actual rule in the reference to complete the recursion
-	ref.Set(rule)
-
-	return rule
+// FileNamespaceDirective represents a file-level namespace directive
+type FileNamespaceDirective struct {
+	Name string
 }
 
 // Helper function to parse commands from content string
@@ -221,7 +573,22 @@ func parseCommands(content string) []Command {
 
 		// Handle special prefixes (check the trimmed version for prefixes)
 		trimmedLine := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmedLine, "@") {
+
+		// Check for backtick command substitution
+		if strings.HasPrefix(trimmedLine, "`") && strings.HasSuffix(trimmedLine, "`") {
+			cmd.IsCommandSubstitution = true
+			cmd.Line = trimmedLine
+		} else if strings.HasPrefix(trimmedLine, "@`") && strings.HasSuffix(trimmedLine, "`") {
+			// Handle @`command` case
+			cmd.Silent = true
+			cmd.IsCommandSubstitution = true
+			cmd.Line = strings.TrimSpace(trimmedLine[1:])
+		} else if strings.HasPrefix(trimmedLine, "-`") && strings.HasSuffix(trimmedLine, "`") {
+			// Handle -`command` case
+			cmd.ContinueOnError = true
+			cmd.IsCommandSubstitution = true
+			cmd.Line = strings.TrimSpace(trimmedLine[1:])
+		} else if strings.HasPrefix(trimmedLine, "@") {
 			cmd.Silent = true
 			// Preserve indentation when removing the @ prefix
 			leadingSpace := line[:len(line)-len(trimmedLine)]
@@ -240,8 +607,7 @@ func parseCommands(content string) []Command {
 	return commands
 }
 
-// For now, we'll use a simpler approach to parse argument lists
-// We'll enhance parseArgList to handle the string directly
+// parseArgumentsFromString parses argument string into array
 func parseArgumentsFromString(argString string) []string {
 	if strings.TrimSpace(argString) == "" {
 		return []string{}
@@ -258,17 +624,46 @@ func parseArgumentsFromString(argString string) []string {
 	return args
 }
 
+// parseDependenciesFromString parses dependency string into array
+func parseDependenciesFromString(depString string) []string {
+	depString = strings.TrimSpace(depString)
+	if depString == "" {
+		return []string{}
+	}
+
+	deps := []string{}
+	parts := strings.FieldsFunc(depString, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n'
+	})
+
+	for _, part := range parts {
+		if part != "" {
+			deps = append(deps, part)
+		}
+	}
+	return deps
+}
+
+// Legacy functions kept for compatibility
 func parseFileWithFileNamespace() p.Rule {
 	return p.Action(
 		p.Seq(
-			ws(),
+			p.Star(p.Or(p.S(" "), p.S("\t"), p.S("\n"), p.S("\r"))),
 			p.S("namespace"),
-			requiredSpace(),
-			p.Named("namespace", parseWord()),
-			ws(),
-			p.Not(p.S("{")), // Make sure there's no opening brace (distinguishes from block namespace)
+			p.Plus(p.Or(p.S(" "), p.S("\t"))),
+			p.Named("namespace", p.Transform(
+				p.Plus(p.Or(
+					p.Range('a', 'z'),
+					p.Range('A', 'Z'),
+					p.Range('0', '9'),
+					p.S("_"),
+				)),
+				func(s string) any { return s },
+			)),
+			p.Star(p.Or(p.S(" "), p.S("\t"), p.S("\n"), p.S("\r"))),
+			p.Not(p.S("{")),
 			p.Named("tasks", parseTasks()),
-			ws(),
+			p.Star(p.Or(p.S(" "), p.S("\t"), p.S("\n"), p.S("\r"))),
 			p.EOS(),
 		),
 		func(v p.Values) any {
@@ -279,43 +674,6 @@ func parseFileWithFileNamespace() p.Rule {
 				FileNamespace: namespace,
 				Tasks:         tasks,
 			}
-		},
-	)
-}
-
-func parseFileWithBlockNamespace() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.S("namespace"),
-			requiredSpace(),
-			p.Named("name", parseWord()),
-			ws(),
-			p.S("{"), // Require opening brace for block namespace
-			p.Named("content", parseRestOfFile()),
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			name := v.Get("name").(string)
-			content := v.Get("content").(string)
-
-			// Parse namespace block manually (content already excludes opening brace)
-			namespace := parseNamespaceBlockContent(name, content)
-
-			return QuakeFile{
-				Tasks:      []Task{},
-				Namespaces: []Namespace{namespace},
-			}
-		},
-	)
-}
-
-func parseRestOfFile() p.Rule {
-	return p.Transform(
-		p.Star(p.Any()),
-		func(s string) any {
-			return s
 		},
 	)
 }
@@ -354,20 +712,6 @@ func parseNamespaceFromContent(name, content string) Namespace {
 	}
 }
 
-func parseNamespaceBlockContent(name, content string) Namespace {
-	content = strings.TrimSpace(content)
-
-	// Find the matching closing brace using quote-aware parsing
-	innerContent := extractContentBeforeClosingBrace(content)
-
-	tasks := parseTasksFromContent(innerContent)
-
-	return Namespace{
-		Name:  name,
-		Tasks: tasks,
-	}
-}
-
 func parseTasks() p.Rule {
 	return p.Transform(
 		p.Star(p.Any()),
@@ -378,367 +722,14 @@ func parseTasks() p.Rule {
 }
 
 func parseTasksFromContent(content string) []Task {
-	tasks := []Task{}
-	content = strings.TrimSpace(content)
-
-	if content == "" {
-		return tasks
-	}
-
-	// Simple parsing for now - look for "task name {" patterns
-	lines := strings.Split(content, "\n")
-	i := 0
-
-	for i < len(lines) {
-		line := strings.TrimSpace(lines[i])
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			i++
-			continue
-		}
-
-		// Check for task declaration
-		if strings.HasPrefix(line, "task ") {
-			task, nextIndex := parseTaskFromLines(lines, i)
-			if task != nil {
-				tasks = append(tasks, *task)
-			}
-			i = nextIndex
-		} else {
-			i++
-		}
-	}
-
-	return tasks
+	// This is a temporary implementation
+	// In a proper implementation, we'd use the PEG parser recursively
+	return []Task{}
 }
 
-func parseTaskFromLines(lines []string, startIndex int) (*Task, int) {
-	if startIndex >= len(lines) {
-		return nil, startIndex + 1
-	}
-
-	line := strings.TrimSpace(lines[startIndex])
-	if !strings.HasPrefix(line, "task ") {
-		return nil, startIndex + 1
-	}
-
-	// Parse task line: "task name {" or "task name(args) {" or "task name => deps {"
-	taskPart := strings.TrimPrefix(line, "task ")
-	taskPart = strings.TrimSpace(taskPart)
-
-	var taskName string
-	var taskArgs []string
-	var taskDeps []string
-
-	// Check for dependencies first
-	var beforeDeps string
-	if strings.Contains(taskPart, "=>") {
-		parts := strings.SplitN(taskPart, "=>", 2)
-		beforeDeps = strings.TrimSpace(parts[0])
-		depPart := parts[1]
-
-		// Extract dependencies
-		if idx := strings.Index(depPart, "{"); idx != -1 {
-			depString := strings.TrimSpace(depPart[:idx])
-			taskDeps = parseArgumentsFromString(depString)
-		} else {
-			depString := strings.TrimSpace(depPart)
-			taskDeps = parseArgumentsFromString(depString)
-		}
-	} else {
-		beforeDeps = taskPart
-	}
-
-	// Now parse name and arguments from beforeDeps
-	if strings.Contains(beforeDeps, "(") && strings.Contains(beforeDeps, ")") {
-		// Task with arguments
-		parts := strings.SplitN(beforeDeps, "(", 2)
-		taskName = strings.TrimSpace(parts[0])
-		argPart := parts[1]
-		if idx := strings.Index(argPart, ")"); idx != -1 {
-			argString := argPart[:idx]
-			taskArgs = parseArgumentsFromString(argString)
-		}
-	} else {
-		// Task without arguments
-		if idx := strings.Index(beforeDeps, "{"); idx != -1 {
-			taskName = strings.TrimSpace(beforeDeps[:idx])
-		} else {
-			taskName = strings.TrimSpace(beforeDeps)
-		}
-	}
-
-	// Find the task body between { and }
-	braceCount := 0
-	taskBody := []string{}
-	i := startIndex
-
-	// Find opening brace
-	for i < len(lines) {
-		line := lines[i]
-		if strings.Contains(line, "{") {
-			braceCount = 1
-			// Get any content after the opening brace
-			if idx := strings.Index(line, "{"); idx != -1 && idx+1 < len(line) {
-				remaining := strings.TrimSpace(line[idx+1:])
-				if remaining != "" {
-					taskBody = append(taskBody, remaining)
-				}
-			}
-			i++
-			break
-		}
-		i++
-	}
-
-	// Collect content until closing brace
-	for i < len(lines) && braceCount > 0 {
-		line := lines[i]
-
-		// Count braces while respecting quoted strings
-		newBraceCount := countBracesRespectingQuotes(line, braceCount)
-
-		if newBraceCount > 0 {
-			taskBody = append(taskBody, line)
-			braceCount = newBraceCount
-		} else if newBraceCount == 0 {
-			// Found the closing brace - handle any content before it
-			closingBraceIndex := findClosingBraceIndex(line)
-			if closingBraceIndex > 0 {
-				remaining := strings.TrimSpace(line[:closingBraceIndex])
-				if remaining != "" {
-					taskBody = append(taskBody, remaining)
-				}
-			}
-			break
-		}
-		i++
-	}
-
-	// Parse commands from task body
-	bodyContent := strings.Join(taskBody, "\n")
-	commands := parseCommands(bodyContent)
-
-	task := &Task{
-		Name:         taskName,
-		Arguments:    taskArgs,
-		Dependencies: taskDeps,
-		Commands:     commands,
-	}
-
-	return task, i + 1
-}
-
-func parseTaskWithArgsAndDeps() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.S("task"),
-			requiredSpace(),
-			p.Named("name", parseWord()),
-			p.S("("),
-			p.Named("args", parseArgList()),
-			p.S(")"),
-			ws(),
-			p.S("=>"),
-			ws(),
-			p.Named("deps", parseDependencyList()),
-			ws(),
-			p.S("{"),
-			p.Named("content", parseContent()),
-			p.S("}"),
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			name := v.Get("name").(string)
-			args := v.Get("args").([]string)
-			deps := v.Get("deps").([]string)
-			content := v.Get("content").(string)
-
-			commands := parseCommands(content)
-
-			task := Task{
-				Name:         name,
-				Arguments:    args,
-				Dependencies: deps,
-				Commands:     commands,
-			}
-
-			return QuakeFile{Tasks: []Task{task}}
-		},
-	)
-}
-
-func parseTaskWithDepsOnly() p.Rule {
-	return p.Action(
-		p.Seq(
-			ws(),
-			p.S("task"),
-			requiredSpace(),
-			p.Named("name", parseWord()),
-			ws(),
-			p.S("=>"),
-			ws(),
-			p.Named("deps", parseDependencyList()),
-			ws(),
-			p.S("{"),
-			p.Named("content", parseContent()),
-			p.S("}"),
-			ws(),
-			p.EOS(),
-		),
-		func(v p.Values) any {
-			name := v.Get("name").(string)
-			deps := v.Get("deps").([]string)
-			content := v.Get("content").(string)
-
-			commands := parseCommands(content)
-
-			task := Task{
-				Name:         name,
-				Dependencies: deps,
-				Commands:     commands,
-			}
-
-			return QuakeFile{Tasks: []Task{task}}
-		},
-	)
-}
-
-func parseDependencyList() p.Rule {
-	return p.Transform(
-		p.Star(p.Seq(
-			p.Not(p.S("{")), // not an opening brace
-			p.Any(),         // any character
-		)),
-		func(s string) any {
-			return parseArgumentsFromString(s)
-		},
-	)
-}
-
-// countBracesRespectingQuotes counts braces in a line while ignoring braces inside quoted strings
-func countBracesRespectingQuotes(line string, currentCount int) int {
-	inSingleQuote := false
-	inDoubleQuote := false
-	braceCount := currentCount
-
-	for i, char := range line {
-		switch char {
-		case '\'':
-			if !inDoubleQuote {
-				// Check if it's escaped
-				if i > 0 && line[i-1] == '\\' {
-					continue
-				}
-				inSingleQuote = !inSingleQuote
-			}
-		case '"':
-			if !inSingleQuote {
-				// Check if it's escaped
-				if i > 0 && line[i-1] == '\\' {
-					continue
-				}
-				inDoubleQuote = !inDoubleQuote
-			}
-		case '{':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount++
-			}
-		case '}':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount--
-				if braceCount < 0 {
-					return 0 // Found the matching closing brace
-				}
-			}
-		}
-	}
-
-	return braceCount
-}
-
-// findClosingBraceIndex finds the index of the task's closing brace, respecting quotes
-func findClosingBraceIndex(line string) int {
-	inSingleQuote := false
-	inDoubleQuote := false
-	braceCount := 0
-
-	for i, char := range line {
-		switch char {
-		case '\'':
-			if !inDoubleQuote {
-				// Check if it's escaped
-				if i > 0 && line[i-1] == '\\' {
-					continue
-				}
-				inSingleQuote = !inSingleQuote
-			}
-		case '"':
-			if !inSingleQuote {
-				// Check if it's escaped
-				if i > 0 && line[i-1] == '\\' {
-					continue
-				}
-				inDoubleQuote = !inDoubleQuote
-			}
-		case '{':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount++
-			}
-		case '}':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount--
-				if braceCount < 0 {
-					return i // Found the closing brace
-				}
-			}
-		}
-	}
-
-	return len(line) // No closing brace found, return end of line
-}
-
-// extractContentBeforeClosingBrace extracts content before the matching closing brace, respecting quotes
-func extractContentBeforeClosingBrace(content string) string {
-	inSingleQuote := false
-	inDoubleQuote := false
-	braceCount := 0
-
-	for i, char := range content {
-		switch char {
-		case '\'':
-			if !inDoubleQuote {
-				// Check if it's escaped
-				if i > 0 && content[i-1] == '\\' {
-					continue
-				}
-				inSingleQuote = !inSingleQuote
-			}
-		case '"':
-			if !inSingleQuote {
-				// Check if it's escaped
-				if i > 0 && content[i-1] == '\\' {
-					continue
-				}
-				inDoubleQuote = !inDoubleQuote
-			}
-		case '{':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount++
-			}
-		case '}':
-			if !inSingleQuote && !inDoubleQuote {
-				braceCount--
-				if braceCount < 0 {
-					// Found the matching closing brace
-					return content[:i]
-				}
-			}
-		}
-	}
-
-	return content // No closing brace found, return all content
+// parseNamespaceFromLines parses a namespace from lines
+func parseNamespaceFromLines(lines []string, startIndex int) (*Namespace, int) {
+	// This is a temporary implementation
+	// In a proper implementation, we'd use the PEG parser recursively
+	return nil, startIndex + 1
 }

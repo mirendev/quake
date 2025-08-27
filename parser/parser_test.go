@@ -7,6 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Helper function to create a QuakeFile with initialized slices
+func makeQuakeFile() QuakeFile {
+	return QuakeFile{
+		Tasks:      []Task{},
+		Namespaces: []Namespace{},
+		Variables:  []Variable{},
+	}
+}
+
 func TestParseSimpleTask(t *testing.T) {
 	input := `task hello {
     echo "Hello, World!"
@@ -16,13 +25,12 @@ func TestParseSimpleTask(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name: "hello",
-				Commands: []Command{
-					{Line: `    echo "Hello, World!"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name: "hello",
+			Commands: []Command{
+				{Line: `    echo "Hello, World!"`},
 			},
 		},
 	}
@@ -39,14 +47,13 @@ func TestParseTaskWithArguments(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name:      "greet",
-				Arguments: []string{"name"},
-				Commands: []Command{
-					{Line: `    echo "Hello, $name!"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name:      "greet",
+			Arguments: []string{"name"},
+			Commands: []Command{
+				{Line: `    echo "Hello, $name!"`},
 			},
 		},
 	}
@@ -65,15 +72,14 @@ func TestParseTaskWithSpecialCommands(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name: "special",
-				Commands: []Command{
-					{Line: `    echo "silent command"`, Silent: true},
-					{Line: `    false`, ContinueOnError: true},
-					{Line: `    echo "normal command"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name: "special",
+			Commands: []Command{
+				{Line: `    echo "silent command"`, Silent: true},
+				{Line: `    false`, ContinueOnError: true},
+				{Line: `    echo "normal command"`},
 			},
 		},
 	}
@@ -88,9 +94,7 @@ func TestParseEmptyFile(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{},
-	}
+	expected := makeQuakeFile()
 
 	require.Equal(t, expected, result)
 }
@@ -126,20 +130,20 @@ func TestParseSimpleNamespace(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{},
-		Namespaces: []Namespace{
-			{
-				Name: "db",
-				Tasks: []Task{
-					{
-						Name: "migrate",
-						Commands: []Command{
-							{Line: `        echo "Running migrations"`},
-						},
+	expected := makeQuakeFile()
+	expected.Namespaces = []Namespace{
+		{
+			Name: "db",
+			Tasks: []Task{
+				{
+					Name: "migrate",
+					Commands: []Command{
+						{Line: `        echo "Running migrations"`},
 					},
 				},
 			},
+			Namespaces: []Namespace{},
+			Variables:  []Variable{},
 		},
 	}
 
@@ -157,14 +161,13 @@ task start {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		FileNamespace: "api",
-		Tasks: []Task{
-			{
-				Name: "start",
-				Commands: []Command{
-					{Line: `    echo "Starting API server"`},
-				},
+	expected := makeQuakeFile()
+	expected.FileNamespace = "api"
+	expected.Tasks = []Task{
+		{
+			Name: "start",
+			Commands: []Command{
+				{Line: `    echo "Starting API server"`},
 			},
 		},
 	}
@@ -181,14 +184,13 @@ func TestParseTaskWithDependencies(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name:         "deploy",
-				Dependencies: []string{"build", "test"},
-				Commands: []Command{
-					{Line: `    echo "Deploying..."`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name:         "deploy",
+			Dependencies: []string{"build", "test"},
+			Commands: []Command{
+				{Line: `    echo "Deploying..."`},
 			},
 		},
 	}
@@ -207,15 +209,14 @@ func TestParseTaskWithQuotedBraces(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name: "test",
-				Commands: []Command{
-					{Line: `    echo "This has } inside quotes"`},
-					{Line: `    echo 'Single quotes with } too'`},
-					{Line: `    echo "Multiple } braces } in one line"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name: "test",
+			Commands: []Command{
+				{Line: `    echo "This has } inside quotes"`},
+				{Line: `    echo 'Single quotes with } too'`},
+				{Line: `    echo "Multiple } braces } in one line"`},
 			},
 		},
 	}
@@ -235,16 +236,15 @@ func TestParseTaskWithNestedBraces(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name: "complex",
-				Commands: []Command{
-					{Line: `    if [ -f file.txt ]; then`},
-					{Line: `        echo "File exists { with braces }"`},
-					{Line: `    fi`},
-					{Line: `    echo "Done"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name: "complex",
+			Commands: []Command{
+				{Line: `    if [ -f file.txt ]; then`},
+				{Line: `        echo "File exists { with braces }"`},
+				{Line: `    fi`},
+				{Line: `    echo "Done"`},
 			},
 		},
 	}
@@ -262,14 +262,13 @@ func TestParseTaskWithJSONInCommand(t *testing.T) {
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
 
-	expected := QuakeFile{
-		Tasks: []Task{
-			{
-				Name: "json",
-				Commands: []Command{
-					{Line: `    curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com`},
-					{Line: `    echo "JSON sent"`},
-				},
+	expected := makeQuakeFile()
+	expected.Tasks = []Task{
+		{
+			Name: "json",
+			Commands: []Command{
+				{Line: `    curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com`},
+				{Line: `    echo "JSON sent"`},
 			},
 		},
 	}
