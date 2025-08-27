@@ -24,6 +24,7 @@ type Grammar struct {
 	taskWithArgs           p.Rule
 	taskWithDeps           p.Rule
 	taskWithArgsAndDeps    p.Rule
+	taskDepsOnly           p.Rule
 	namespace              p.Rule
 	namespaceRef           p.Rule
 	argList                p.Rule
@@ -83,6 +84,8 @@ func (g *Grammar) init() {
 			p.Range('A', 'Z'),
 			p.Range('0', '9'),
 			p.S("_"),
+			p.S(":"),
+			p.S("."),
 		)),
 		func(s string) any {
 			return s
@@ -419,7 +422,7 @@ func (g *Grammar) init() {
 
 	g.dependencies = p.Transform(
 		p.Star(p.Seq(
-			p.Not(p.S("{")),
+			p.Not(p.Or(p.S("{"), p.S("\n"))),
 			p.Any(),
 		)),
 		func(s string) any {
@@ -546,9 +549,35 @@ func (g *Grammar) init() {
 		},
 	)
 
+	// Task with dependencies only (no body)
+	g.taskDepsOnly = p.Action(
+		p.Seq(
+			p.S("task"),
+			g.requiredSpace,
+			p.Named("name", g.word),
+			g.ws,
+			p.S("=>"),
+			g.ws,
+			p.Named("deps", g.dependencies),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			name := v.Get("name").(string)
+			deps := v.Get("deps").([]string)
+
+			return Task{
+				Name:         name,
+				Dependencies: deps,
+				Commands:     []Command{}, // Empty commands for deps-only tasks
+			}
+		},
+	)
+
 	g.task = p.Or(
 		g.taskWithArgsAndDeps,
 		g.taskWithDeps,
+		g.taskDepsOnly, // Add this before taskWithArgs to prioritize deps-only parsing
 		g.taskWithArgs,
 		g.taskSimple,
 	)

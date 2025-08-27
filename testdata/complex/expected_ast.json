@@ -1,0 +1,2226 @@
+{
+  "tasks": [
+    {
+      "name": "default",
+      "dependencies": [
+        "build"
+      ],
+      "commands": []
+    },
+    {
+      "name": "version",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Application: "
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Version: "
+            },
+            {
+              "type": "variable",
+              "name": "VERSION"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Git Commit: "
+            },
+            {
+              "type": "variable",
+              "name": "GIT_COMMIT"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Build Time: "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_TIME"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Go Version: "
+            },
+            {
+              "type": "variable",
+              "name": "GO_VERSION"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deps",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Installing dependencies...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go mod download"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go mod tidy"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Dependencies installed\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fmt",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Formatting Go source files...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go fmt ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Formatting complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "lint",
+      "dependencies": [
+        "fmt"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running linters...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Check if golangci-lint is installed"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if command -v golangci-lint \u003e/dev/null 2\u003e\u00261; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "golangci-lint run ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "else"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"golangci-lint not found, running basic checks...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go vet ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Linting complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "test",
+      "dependencies": [
+        "deps"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running tests...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go test -v -race -coverprofile=coverage.out ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Tests complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "test:coverage",
+      "dependencies": [
+        "test"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Generating coverage report...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "mkdir -p "
+            },
+            {
+              "type": "variable",
+              "name": "COVERAGE_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go tool cover -html=coverage.out -o "
+            },
+            {
+              "type": "variable",
+              "name": "COVERAGE_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/coverage.html"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go tool cover -func=coverage.out"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Coverage report saved to "
+            },
+            {
+              "type": "variable",
+              "name": "COVERAGE_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/coverage.html\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bench",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running benchmarks...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go test -bench=. -benchmem ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Benchmarks complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "generate",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Generating code...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go generate ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Code generation complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "build",
+      "dependencies": [
+        "deps",
+        "generate",
+        "lint"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Building "
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "mkdir -p "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "CGO_ENABLED="
+            },
+            {
+              "type": "variable",
+              "name": "CGO_ENABLED"
+            },
+            {
+              "type": "string",
+              "value": " go build "
+            },
+            {
+              "type": "variable",
+              "name": "GOFLAGS"
+            },
+            {
+              "type": "string",
+              "value": " \\"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "ldflags \""
+            },
+            {
+              "type": "variable",
+              "name": "LDFLAGS"
+            },
+            {
+              "type": "string",
+              "value": "\" \\"
+            }
+          ],
+          "continue_on_error": true
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "o "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": " \\"
+            }
+          ],
+          "continue_on_error": true
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "./cmd/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Build complete: "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "ls -lh "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "build:all",
+      "dependencies": [
+        "deps"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Building for multiple platforms...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "mkdir -p "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Build matrix"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "for os in linux darwin windows; do"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "for arch in amd64 arm64; do"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "output=\"$DIST_DIR/$BINARY-$VERSION-${os}-${arch}\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if [ \""
+            },
+            {
+              "type": "variable",
+              "name": "os"
+            },
+            {
+              "type": "string",
+              "value": "\" = \"windows\" ]; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "output=\"${output}.exe\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Building for ${os}/${arch}...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "GOOS=${os} GOARCH=${arch} CGO_ENABLED=0 \\"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go build -ldflags \""
+            },
+            {
+              "type": "variable",
+              "name": "LDFLAGS"
+            },
+            {
+              "type": "string",
+              "value": "\" \\"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "o ${output} \\"
+            }
+          ],
+          "continue_on_error": true
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "./cmd/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "done"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "done"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Multi-platform build complete\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "ls -lh "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dist",
+      "dependencies": [
+        "build:all"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Creating release archives...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "cd "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "for file in "
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "-*; do"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if [[ \""
+            },
+            {
+              "type": "variable",
+              "name": "file"
+            },
+            {
+              "type": "string",
+              "value": "\" == *.exe ]]; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "zip \"${file%.exe}.zip\" \"$file\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Created ${file%.exe}.zip\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "else"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "tar czf \"${file}.tar.gz\" \"$file\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Created ${file}.tar.gz\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "done"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Generate checksums"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "shasum -a 256 *.tar.gz *.zip \u003e checksums.txt"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Generated checksums.txt\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "cd -"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Release archives created in "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "dependencies": [
+        "build"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running "
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/"
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "watch",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Starting with hot reload...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if command -v air \u003e/dev/null 2\u003e\u00261; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "air"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "elif command -v reflex \u003e/dev/null 2\u003e\u00261; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "reflex -r '\\.go$' -s -- sh -c 'go run ./cmd/$BINARY'"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "else"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"No hot reload tool found (air or reflex)\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Install with: go install github.com/cosmtrek/air@latest\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "exit 1"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "clean",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Cleaning build artifacts...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "rm -rf "
+            },
+            {
+              "type": "variable",
+              "name": "BUILD_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "rm -rf "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "rm -rf "
+            },
+            {
+              "type": "variable",
+              "name": "COVERAGE_DIR"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "rm -f coverage.out"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go clean -cache"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Clean complete\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "security",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running security scan...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if command -v gosec \u003e/dev/null 2\u003e\u00261; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "gosec ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "else"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"gosec not found, install with: go install github.com/securego/gosec/v2/cmd/gosec@latest\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Checking for vulnerabilities...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go list -json -deps ./... | nancy sleuth"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deps:update",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Updating dependencies...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go get -u ./..."
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go mod tidy"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Dependencies updated\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "vendor",
+      "dependencies": [
+        "deps"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Vendoring dependencies...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go mod vendor"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Dependencies vendored\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release",
+      "dependencies": [
+        "test",
+        "build:all",
+        "dist"
+      ],
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Release "
+            },
+            {
+              "type": "variable",
+              "name": "VERSION"
+            },
+            {
+              "type": "string",
+              "value": " prepared\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Archives ready in "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Next steps:\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  1. git tag -a v"
+            },
+            {
+              "type": "variable",
+              "name": "VERSION"
+            },
+            {
+              "type": "string",
+              "value": " -m 'Release v"
+            },
+            {
+              "type": "variable",
+              "name": "VERSION"
+            },
+            {
+              "type": "string",
+              "value": "'\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  2. git push origin v"
+            },
+            {
+              "type": "variable",
+              "name": "VERSION"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  3. Upload archives from "
+            },
+            {
+              "type": "variable",
+              "name": "DIST_DIR"
+            },
+            {
+              "type": "string",
+              "value": "/ to GitHub releases\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "setup",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Setting up development environment...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Install tools"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Installing development tools...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go install github.com/cosmtrek/air@latest"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go install github.com/securego/gosec/v2/cmd/gosec@latest"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Install dependencies"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "go mod download"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "# Setup git hooks"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "if [ -d \".git\" ]; then"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Setting up git hooks...\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"#!/bin/sh\" \u003e .git/hooks/pre-commit"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"quake ci:precommit\" \u003e\u003e .git/hooks/pre-commit"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "chmod +x .git/hooks/pre-commit"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "fi"
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Development environment ready\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "help",
+      "commands": [
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Quake - Task Runner for "
+            },
+            {
+              "type": "variable",
+              "name": "BINARY"
+            },
+            {
+              "type": "string",
+              "value": "\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Usage: quake [task]\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Available tasks:\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  build          - Build the application\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  test           - Run tests\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  lint           - Run linters\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  fmt            - Format code\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  run            - Run the application\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  watch          - Run with hot reload\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  clean          - Clean build artifacts\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  release        - Create a release\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  docker:build   - Build Docker image\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"  db:migrate     - Run database migrations\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"\""
+            }
+          ]
+        },
+        {
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Run 'quake -T' to see all available tasks\""
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "namespaces": [
+    {
+      "name": "docker",
+      "tasks": [
+        {
+          "name": "build",
+          "dependencies": [
+            "build"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Building Docker image "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":"
+                },
+                {
+                  "type": "variable",
+                  "name": "TAG"
+                },
+                {
+                  "type": "string",
+                  "value": "...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "docker build -f "
+                },
+                {
+                  "type": "variable",
+                  "name": "DOCKERFILE"
+                },
+                {
+                  "type": "string",
+                  "value": " -t "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":"
+                },
+                {
+                  "type": "variable",
+                  "name": "TAG"
+                },
+                {
+                  "type": "string",
+                  "value": " ."
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "docker tag "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":"
+                },
+                {
+                  "type": "variable",
+                  "name": "TAG"
+                },
+                {
+                  "type": "string",
+                  "value": " "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":latest"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Docker image built\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "run",
+          "dependencies": [
+            "docker:build"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Running Docker container...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "docker run --rm -it "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":"
+                },
+                {
+                  "type": "variable",
+                  "name": "TAG"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "push",
+          "dependencies": [
+            "docker:build"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Pushing Docker image...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "docker push "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":"
+                },
+                {
+                  "type": "variable",
+                  "name": "TAG"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "docker push "
+                },
+                {
+                  "type": "variable",
+                  "name": "IMAGE"
+                },
+                {
+                  "type": "string",
+                  "value": ":latest"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Docker image pushed\""
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "name": "IMAGE",
+          "value": "\"$BINARY\""
+        },
+        {
+          "name": "TAG",
+          "value": "\"$VERSION\""
+        },
+        {
+          "name": "DOCKERFILE",
+          "value": "\"Dockerfile\""
+        }
+      ]
+    },
+    {
+      "name": "db",
+      "tasks": [
+        {
+          "name": "create",
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Creating database "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_NAME"
+                },
+                {
+                  "type": "string",
+                  "value": "...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "createdb -h "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_HOST"
+                },
+                {
+                  "type": "string",
+                  "value": " -U "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_USER"
+                },
+                {
+                  "type": "string",
+                  "value": " "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_NAME"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Database created\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "drop",
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Dropping database "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_NAME"
+                },
+                {
+                  "type": "string",
+                  "value": "...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "dropdb -h "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_HOST"
+                },
+                {
+                  "type": "string",
+                  "value": " -U "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_USER"
+                },
+                {
+                  "type": "string",
+                  "value": " "
+                },
+                {
+                  "type": "variable",
+                  "name": "DB_NAME"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Database dropped\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "migrate",
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Running database migrations...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "go run ./cmd/migrate up"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Migrations complete\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "rollback",
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Rolling back last migration...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "go run ./cmd/migrate down 1"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Rollback complete\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "seed",
+          "dependencies": [
+            "migrate"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Seeding database...\""
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "go run ./cmd/seed"
+                }
+              ]
+            },
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Database seeded\""
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "name": "DB_NAME",
+          "value": {
+            "type": "or",
+            "left": {
+              "type": "access",
+              "object": {
+                "type": "identifier",
+                "name": "env"
+              },
+              "property": "DB_NAME"
+            },
+            "right": {
+              "type": "string",
+              "value": "myapp_dev"
+            }
+          },
+          "is_expression": true
+        },
+        {
+          "name": "DB_USER",
+          "value": {
+            "type": "or",
+            "left": {
+              "type": "access",
+              "object": {
+                "type": "identifier",
+                "name": "env"
+              },
+              "property": "DB_USER"
+            },
+            "right": {
+              "type": "string",
+              "value": "postgres"
+            }
+          },
+          "is_expression": true
+        },
+        {
+          "name": "DB_HOST",
+          "value": {
+            "type": "or",
+            "left": {
+              "type": "access",
+              "object": {
+                "type": "identifier",
+                "name": "env"
+              },
+              "property": "DB_HOST"
+            },
+            "right": {
+              "type": "string",
+              "value": "localhost"
+            }
+          },
+          "is_expression": true
+        }
+      ]
+    },
+    {
+      "name": "ci",
+      "tasks": [
+        {
+          "name": "all",
+          "dependencies": [
+            "deps",
+            "lint",
+            "test",
+            "build"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"CI pipeline complete\""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "precommit",
+          "dependencies": [
+            "fmt",
+            "lint",
+            "test"
+          ],
+          "commands": [
+            {
+              "elements": [
+                {
+                  "type": "string",
+                  "value": "echo \"Pre-commit checks passed\""
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variables": [
+    {
+      "name": "PROJECT",
+      "value": "\"github.com/example/myapp\""
+    },
+    {
+      "name": "BINARY",
+      "value": "\"myapp\""
+    },
+    {
+      "name": "VERSION",
+      "value": "`git describe --tags --always --dirty 2\u003e/dev/null || echo \"dev\"`",
+      "command_substitution": true
+    },
+    {
+      "name": "BUILD_TIME",
+      "value": "`date -u +\"%Y-%m-%dT%H:%M:%SZ\"`",
+      "command_substitution": true
+    },
+    {
+      "name": "GIT_COMMIT",
+      "value": "`git rev-parse HEAD 2\u003e/dev/null || echo \"unknown\"`",
+      "command_substitution": true
+    },
+    {
+      "name": "GO_VERSION",
+      "value": "`go version | cut -d' ' -f3`",
+      "command_substitution": true
+    },
+    {
+      "name": "LDFLAGS",
+      "value": "\"-X main.Version=$VERSION -X main.BuildTime=$BUILD_TIME -X main.GitCommit=$GIT_COMMIT\""
+    },
+    {
+      "name": "GOFLAGS",
+      "value": "\"-v\""
+    },
+    {
+      "name": "CGO_ENABLED",
+      "value": "\"0\""
+    },
+    {
+      "name": "BUILD_DIR",
+      "value": "\"build\""
+    },
+    {
+      "name": "DIST_DIR",
+      "value": "\"dist\""
+    },
+    {
+      "name": "COVERAGE_DIR",
+      "value": "\"coverage\""
+    }
+  ]
+}
