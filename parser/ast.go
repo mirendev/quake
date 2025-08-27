@@ -48,7 +48,7 @@ type Task struct {
 // Variable represents a variable assignment
 type Variable struct {
 	Name                string `json:"name"`
-	Value               string `json:"value"`
+	Value               any    `json:"value"` // Can be string, Expression, or BacktickElement
 	IsExpression        bool   `json:"is_expression,omitempty"`
 	CommandSubstitution bool   `json:"command_substitution,omitempty"`
 	IsMultiline         bool   `json:"is_multiline,omitempty"`
@@ -90,7 +90,7 @@ func (BacktickElement) commandElement() {}
 
 // ExpressionElement represents an expression like {{expr}}
 type ExpressionElement struct {
-	Expression string `json:"expression"`
+	Expression Expression `json:"expression"`
 }
 
 func (ExpressionElement) commandElement() {}
@@ -101,6 +101,83 @@ type VariableElement struct {
 }
 
 func (VariableElement) commandElement() {}
+
+// Expression AST nodes for parsing inside {{}} blocks
+type Expression interface {
+	expression()
+}
+
+// Identifier represents a simple identifier like "env" or "target"
+type Identifier struct {
+	Name string `json:"name"`
+}
+
+func (Identifier) expression() {}
+
+// AccessId represents dot notation like "env.API_KEY"
+type AccessId struct {
+	Object   Expression `json:"object"`
+	Property string     `json:"property"`
+}
+
+func (AccessId) expression() {}
+
+// StringLiteral represents a quoted string in expressions
+type StringLiteral struct {
+	Value string `json:"value"`
+}
+
+func (StringLiteral) expression() {}
+
+// Or represents the || operator
+type Or struct {
+	Left  Expression `json:"left"`
+	Right Expression `json:"right"`
+}
+
+func (Or) expression() {}
+
+// MarshalJSON for Expression interface
+func marshalExpression(expr Expression) (any, error) {
+	switch e := expr.(type) {
+	case Identifier:
+		return struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+		}{"identifier", e.Name}, nil
+	case AccessId:
+		obj, err := marshalExpression(e.Object)
+		if err != nil {
+			return nil, err
+		}
+		return struct {
+			Type     string `json:"type"`
+			Object   any    `json:"object"`
+			Property string `json:"property"`
+		}{"access", obj, e.Property}, nil
+	case StringLiteral:
+		return struct {
+			Type  string `json:"type"`
+			Value string `json:"value"`
+		}{"string", e.Value}, nil
+	case Or:
+		left, err := marshalExpression(e.Left)
+		if err != nil {
+			return nil, err
+		}
+		right, err := marshalExpression(e.Right)
+		if err != nil {
+			return nil, err
+		}
+		return struct {
+			Type  string `json:"type"`
+			Left  any    `json:"left"`
+			Right any    `json:"right"`
+		}{"or", left, right}, nil
+	default:
+		return nil, fmt.Errorf("unknown expression type: %T", e)
+	}
+}
 
 // MarshalJSON for Command to handle the interface slice
 func (c Command) MarshalJSON() ([]byte, error) {
@@ -119,10 +196,14 @@ func (c Command) MarshalJSON() ([]byte, error) {
 				Command string `json:"command"`
 			}{"backtick", e.Command}
 		case ExpressionElement:
+			expr, err := marshalExpression(e.Expression)
+			if err != nil {
+				return nil, err
+			}
 			elements[i] = struct {
 				Type       string `json:"type"`
-				Expression string `json:"expression"`
-			}{"expression", e.Expression}
+				Expression any    `json:"expression"`
+			}{"expression", expr}
 		case VariableElement:
 			elements[i] = struct {
 				Type string `json:"type"`
@@ -199,4 +280,41 @@ func (c *Command) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// MarshalJSON for Variable to handle different value types
+func (v Variable) MarshalJSON() ([]byte, error) {
+	var value any
+	var err error
+	
+	switch val := v.Value.(type) {
+	case string:
+		value = val
+	case Expression:
+		value, err = marshalExpression(val)
+		if err != nil {
+			return nil, err
+		}
+	case BacktickElement:
+		value = struct {
+			Type    string `json:"type"`
+			Command string `json:"command"`
+		}{"backtick", val.Command}
+	default:
+		value = val
+	}
+	
+	return json.Marshal(struct {
+		Name                string `json:"name"`
+		Value               any    `json:"value"`
+		IsExpression        bool   `json:"is_expression,omitempty"`
+		CommandSubstitution bool   `json:"command_substitution,omitempty"`
+		IsMultiline         bool   `json:"is_multiline,omitempty"`
+	}{
+		Name:                v.Name,
+		Value:               value,
+		IsExpression:        v.IsExpression,
+		CommandSubstitution: v.CommandSubstitution,
+		IsMultiline:         v.IsMultiline,
+	})
 }

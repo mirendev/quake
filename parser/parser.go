@@ -41,6 +41,13 @@ type Grammar struct {
 	backtickCmd       p.Rule
 	variableRef       p.Rule
 	expressionElement p.Rule
+	// Expression parsing rules
+	expr          p.Rule
+	orExpr        p.Rule
+	primaryExpr   p.Rule
+	accessExpr    p.Rule
+	identifier    p.Rule
+	stringLiteral p.Rule
 }
 
 // NewGrammar creates and initializes a new grammar
@@ -149,6 +156,147 @@ func (g *Grammar) init() {
 		},
 	)
 
+	// Define expression parsing rules first (needed for variable parsing)
+	// Identifier: valid name like "env", "target"
+	g.identifier = p.Transform(
+		p.Seq(
+			p.Or(p.Range('a', 'z'), p.Range('A', 'Z'), p.S("_")),
+			p.Star(p.Or(
+				p.Range('a', 'z'),
+				p.Range('A', 'Z'),
+				p.Range('0', '9'),
+				p.S("_"),
+			)),
+		),
+		func(s string) any {
+			return Identifier{Name: s}
+		},
+	)
+
+	// String literal: "text" or 'text'
+	g.stringLiteral = p.Or(
+		// Double quoted string
+		p.Action(
+			p.Seq(
+				p.S("\""),
+				p.Named("content", p.Transform(
+					p.Star(p.Or(
+						p.S("\\\""),
+						p.S("\\\\"),
+						p.Seq(p.Not(p.S("\"")), p.Any()),
+					)),
+					func(s string) any { return s },
+				)),
+				p.S("\""),
+			),
+			func(v p.Values) any {
+				content := v.Get("content").(string)
+				// Unescape the content
+				content = strings.ReplaceAll(content, "\\\"", "\"")
+				content = strings.ReplaceAll(content, "\\\\", "\\")
+				return StringLiteral{Value: content}
+			},
+		),
+		// Single quoted string
+		p.Action(
+			p.Seq(
+				p.S("'"),
+				p.Named("content", p.Transform(
+					p.Star(p.Or(
+						p.S("\\'"),
+						p.S("\\\\"),
+						p.Seq(p.Not(p.S("'")), p.Any()),
+					)),
+					func(s string) any { return s },
+				)),
+				p.S("'"),
+			),
+			func(v p.Values) any {
+				content := v.Get("content").(string)
+				// Unescape the content
+				content = strings.ReplaceAll(content, "\\'", "'")
+				content = strings.ReplaceAll(content, "\\\\", "\\")
+				return StringLiteral{Value: content}
+			},
+		),
+	)
+
+	// Primary expression: identifier or string literal
+	g.primaryExpr = p.Or(g.identifier, g.stringLiteral)
+
+	// Access expression: obj.prop (left-associative)
+	g.accessExpr = p.Action(
+		p.Seq(
+			p.Named("base", g.primaryExpr),
+			p.Named("accesses", p.Many(p.Action(
+				p.Seq(
+					p.S("."),
+					p.Named("prop", g.identifier),
+				),
+				func(v p.Values) any {
+					return v.Get("prop").(Identifier).Name
+				},
+			), 0, -1, func(values []any) any {
+				return values
+			})),
+		),
+		func(v p.Values) any {
+			base := v.Get("base").(Expression)
+			accesses := v.Get("accesses")
+
+			result := base
+			if accesses != nil {
+				if accessList, ok := accesses.([]any); ok {
+					for _, access := range accessList {
+						if prop, ok := access.(string); ok {
+							result = AccessId{Object: result, Property: prop}
+						}
+					}
+				}
+			}
+			return result
+		},
+	)
+
+	// Or expression: expr || expr (left-associative)
+	g.orExpr = p.Action(
+		p.Seq(
+			p.Named("left", g.accessExpr),
+			p.Named("rights", p.Many(p.Action(
+				p.Seq(
+					p.Star(p.Or(p.S(" "), p.S("\t"))),
+					p.S("||"),
+					p.Star(p.Or(p.S(" "), p.S("\t"))),
+					p.Named("right", g.accessExpr),
+				),
+				func(v p.Values) any {
+					return v.Get("right")
+				},
+			), 0, -1, func(values []any) any {
+				return values
+			})),
+		),
+		func(v p.Values) any {
+			left := v.Get("left").(Expression)
+			rights := v.Get("rights")
+
+			result := left
+			if rights != nil {
+				if rightList, ok := rights.([]any); ok {
+					for _, right := range rightList {
+						if rightExpr, ok := right.(Expression); ok {
+							result = Or{Left: result, Right: rightExpr}
+						}
+					}
+				}
+			}
+			return result
+		},
+	)
+
+	// Top-level expression
+	g.expr = g.orExpr
+
 	// Define variable parsing rules
 	g.quotedString = p.Transform(
 		p.Seq(
@@ -183,15 +331,12 @@ func (g *Grammar) init() {
 	g.expressionValue = p.Action(
 		p.Seq(
 			p.S("{{"),
-			p.Named("expr", p.Transform(
-				p.Star(p.Seq(p.Not(p.S("}}")), p.Any())),
-				func(s string) any { return s },
-			)),
+			p.Named("expr", g.expr),
 			p.S("}}"),
 		),
 		func(v p.Values) any {
 			return Variable{
-				Value:        "{{" + v.Get("expr").(string) + "}}",
+				Value:        v.Get("expr").(Expression),
 				IsExpression: true,
 			}
 		},
@@ -568,17 +713,13 @@ func (g *Grammar) init() {
 	g.expressionElement = p.Action(
 		p.Seq(
 			p.S("{{"),
-			p.Named("expr", p.Transform(
-				p.Star(p.Seq(
-					p.Not(p.S("}}")),
-					p.Any(),
-				)),
-				func(s string) any { return s },
-			)),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
+			p.Named("expr", g.expr),
+			p.Star(p.Or(p.S(" "), p.S("\t"))),
 			p.S("}}"),
 		),
 		func(v p.Values) any {
-			return ExpressionElement{Expression: v.Get("expr").(string)}
+			return ExpressionElement{Expression: v.Get("expr").(Expression)}
 		},
 	)
 
@@ -647,6 +788,7 @@ func (g *Grammar) init() {
 			return Command{Elements: elements}
 		},
 	)
+
 }
 
 // ParseQuakefile parses a Quakefile string and returns the AST

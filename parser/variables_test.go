@@ -101,8 +101,14 @@ task deploy {
 
 	expected := QuakeFile{
 		Variables: []Variable{
-			{Name: "DEPLOY_ENV", Value: `{{env.DEPLOY_ENV || "development"}}`, IsExpression: true},
-			{Name: "API_KEY", Value: `{{env.API_KEY || "default-key"}}`, IsExpression: true},
+			{Name: "DEPLOY_ENV", Value: Or{
+				Left:  AccessId{Object: Identifier{Name: "env"}, Property: "DEPLOY_ENV"},
+				Right: StringLiteral{Value: "development"},
+			}, IsExpression: true},
+			{Name: "API_KEY", Value: Or{
+				Left:  AccessId{Object: Identifier{Name: "env"}, Property: "API_KEY"},
+				Right: StringLiteral{Value: "default-key"},
+			}, IsExpression: true},
 		},
 		Tasks: []Task{
 			{
@@ -188,7 +194,10 @@ func TestParseTaskLocalVariables(t *testing.T) {
 				Commands: []Command{
 					{Elements: []CommandElement{
 						StringElement{Value: "TARGET = "},
-						ExpressionElement{Expression: `target || "release"`},
+						ExpressionElement{Expression: Or{
+							Left:  Identifier{Name: "target"},
+							Right: StringLiteral{Value: "release"},
+						}},
 					}},
 					{Elements: []CommandElement{
 						StringElement{Value: "echo \"Building "},
