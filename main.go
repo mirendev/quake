@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"miren.dev/quake/evaluator"
 	"miren.dev/quake/parser"
 )
 
@@ -22,10 +23,18 @@ func main() {
 		return
 	}
 
-	// For now, just show usage if no flags provided
-	fmt.Println("Usage: quake [options]")
-	fmt.Println("Options:")
-	fmt.Println("  -l    List all tasks with their documentation")
+	// Get task name from remaining arguments
+	args := flag.Args()
+	taskName := ""
+	if len(args) > 0 {
+		taskName = args[0]
+	}
+
+	// Run the task
+	if err := runTask(taskName); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func listAllTasks() error {
@@ -107,4 +116,31 @@ func getFirstLine(description string) string {
 		}
 	}
 	return ""
+}
+
+func runTask(taskName string) error {
+	// Look for Quakefile in current directory
+	quakefilePath := "Quakefile"
+	if _, err := os.Stat(quakefilePath); os.IsNotExist(err) {
+		return fmt.Errorf("no Quakefile found in current directory")
+	}
+
+	// Read the Quakefile
+	data, err := os.ReadFile(quakefilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read Quakefile: %w", err)
+	}
+
+	// Parse the Quakefile
+	result, ok, err := parser.ParseQuakefile(string(data))
+	if !ok {
+		return fmt.Errorf("failed to parse Quakefile: %w", err)
+	}
+	if err != nil {
+		return fmt.Errorf("error parsing Quakefile: %w", err)
+	}
+
+	// Create evaluator and run task
+	eval := evaluator.New(&result)
+	return eval.RunTask(taskName)
 }

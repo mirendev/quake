@@ -1,0 +1,56 @@
+# Main build configuration
+file_namespace build
+
+# Variables
+VERSION = "1.0.0"
+BUILD_DIR = "./build"
+DEPLOY_ENV = {{env.DEPLOY_ENV || "development"}}
+
+# Default task that runs everything
+task default => clean, build, test
+
+# Clean build artifacts
+task clean {
+    rm -rf $BUILD_DIR
+    @echo "Cleaned build directory"
+}
+
+# Build the application
+task build(target) => deps {
+    echo "Building version {{VERSION}}"
+    go build -o $BUILD_DIR/app
+    echo "Build complete for `hostname`"
+}
+
+# Run all tests
+task test {
+    -go test ./...  # Continue even if tests fail
+    echo "Tests completed"
+}
+
+# Install dependencies
+task deps {
+    go mod download
+    go mod verify
+}
+
+namespace docker {
+    # Build Docker image
+    task build {
+        docker build -t myapp:{{VERSION}} .
+    }
+    
+    # Run Docker container
+    task run => build {
+        docker run -p 8080:8080 myapp:{{VERSION}}
+    }
+}
+
+# Deploy task with multi-line command
+task deploy => build {
+    """
+    rsync -avz $BUILD_DIR/ user@server:/app/
+    ssh user@server 'systemctl restart app'
+    echo "Deployment complete"
+    """
+}

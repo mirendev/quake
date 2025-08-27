@@ -1,3 +1,6 @@
+# Default task
+task default => build
+
 # Build the project
 task build {
     go build -o quake main.go
