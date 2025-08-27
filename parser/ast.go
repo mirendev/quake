@@ -40,6 +40,7 @@ func (q *QuakeFile) UnmarshalJSON(data []byte) error {
 // Task represents a task definition in a Quakefile
 type Task struct {
 	Name         string    `json:"name"`
+	Description  string    `json:"description,omitempty"`
 	Arguments    []string  `json:"arguments,omitempty"`
 	Dependencies []string  `json:"dependencies,omitempty"`
 	Commands     []Command `json:"commands"`
@@ -286,7 +287,7 @@ func (c *Command) UnmarshalJSON(data []byte) error {
 func (v Variable) MarshalJSON() ([]byte, error) {
 	var value any
 	var err error
-	
+
 	switch val := v.Value.(type) {
 	case string:
 		value = val
@@ -303,7 +304,7 @@ func (v Variable) MarshalJSON() ([]byte, error) {
 	default:
 		value = val
 	}
-	
+
 	return json.Marshal(struct {
 		Name                string `json:"name"`
 		Value               any    `json:"value"`

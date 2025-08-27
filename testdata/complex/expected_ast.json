@@ -2,6 +2,7 @@
   "tasks": [
     {
       "name": "default",
+      "description": "Default task",
       "dependencies": [
         "build"
       ],
@@ -9,6 +10,7 @@
     },
     {
       "name": "version",
+      "description": "Display version information",
       "commands": [
         {
           "elements": [
@@ -94,6 +96,7 @@
     },
     {
       "name": "deps",
+      "description": "Install dependencies",
       "commands": [
         {
           "elements": [
@@ -131,6 +134,7 @@
     },
     {
       "name": "fmt",
+      "description": "Run go fmt on all source files",
       "commands": [
         {
           "elements": [
@@ -160,6 +164,7 @@
     },
     {
       "name": "lint",
+      "description": "Run linters",
       "dependencies": [
         "fmt"
       ],
@@ -240,6 +245,7 @@
     },
     {
       "name": "test",
+      "description": "Run tests",
       "dependencies": [
         "deps"
       ],
@@ -272,6 +278,7 @@
     },
     {
       "name": "test:coverage",
+      "description": "Run tests with coverage report",
       "dependencies": [
         "test"
       ],
@@ -340,6 +347,7 @@
     },
     {
       "name": "bench",
+      "description": "Run benchmarks",
       "commands": [
         {
           "elements": [
@@ -369,6 +377,7 @@
     },
     {
       "name": "generate",
+      "description": "Generate mocks",
       "commands": [
         {
           "elements": [
@@ -398,6 +407,7 @@
     },
     {
       "name": "build",
+      "description": "Build the application",
       "dependencies": [
         "deps",
         "generate",
@@ -558,6 +568,7 @@
     },
     {
       "name": "build:all",
+      "description": "Build for multiple platforms",
       "dependencies": [
         "deps"
       ],
@@ -743,6 +754,7 @@
     },
     {
       "name": "dist",
+      "description": "Create release archives",
       "dependencies": [
         "build:all"
       ],
@@ -907,6 +919,7 @@
     },
     {
       "name": "run",
+      "description": "Run the application",
       "dependencies": [
         "build"
       ],
@@ -947,6 +960,7 @@
     },
     {
       "name": "watch",
+      "description": "Run with hot reload",
       "commands": [
         {
           "elements": [
@@ -1032,6 +1046,7 @@
     },
     {
       "name": "clean",
+      "description": "Clean build artifacts",
       "commands": [
         {
           "elements": [
@@ -1105,6 +1120,7 @@
     },
     {
       "name": "security",
+      "description": "Run security scan",
       "commands": [
         {
           "elements": [
@@ -1174,6 +1190,7 @@
     },
     {
       "name": "deps:update",
+      "description": "Update dependencies",
       "commands": [
         {
           "elements": [
@@ -1211,6 +1228,7 @@
     },
     {
       "name": "vendor",
+      "description": "Vendor dependencies",
       "dependencies": [
         "deps"
       ],
@@ -1243,6 +1261,7 @@
     },
     {
       "name": "release",
+      "description": "Create a new release",
       "dependencies": [
         "test",
         "build:all",
@@ -1357,6 +1376,7 @@
     },
     {
       "name": "setup",
+      "description": "Setup development environment",
       "commands": [
         {
           "elements": [
@@ -1490,6 +1510,7 @@
     },
     {
       "name": "help",
+      "description": "Show available tasks",
       "commands": [
         {
           "elements": [

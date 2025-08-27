@@ -25,6 +25,7 @@ type Grammar struct {
 	taskWithDeps           p.Rule
 	taskWithArgsAndDeps    p.Rule
 	taskDepsOnly           p.Rule
+	taskWithDoc            p.Rule
 	namespace              p.Rule
 	namespaceRef           p.Rule
 	argList                p.Rule
@@ -134,14 +135,22 @@ func (g *Grammar) init() {
 	)
 
 	// Define comment
-	g.comment = p.Action(
+	// Parse comment and capture its text
+	g.comment = p.Transform(
 		p.Seq(
 			p.S("#"),
+			p.Star(p.Or(p.S(" "), p.S("\t"))), // Optional whitespace after #
 			p.Star(p.Seq(p.Not(p.S("\n")), p.Any())),
 			p.Or(p.S("\n"), p.EOS()),
 		),
-		func(v p.Values) any {
-			return nil // Comments are ignored
+		func(s string) any {
+			// Extract the comment text after the # and optional whitespace
+			if len(s) > 0 {
+				s = strings.TrimPrefix(s, "#")
+				s = strings.TrimSpace(s)
+				return s
+			}
+			return ""
 		},
 	)
 
@@ -645,16 +654,38 @@ func (g *Grammar) init() {
 	}
 	g.namespace = namespaceRule
 
+	// Task with optional documentation comment
+	g.taskWithDoc = p.Or(
+		// Task with preceding comment
+		p.Action(
+			p.Seq(
+				g.ws,
+				p.Named("doc", g.comment),
+				g.ws,
+				p.Named("task", g.task),
+			),
+			func(v p.Values) any {
+				task := v.Get("task").(Task)
+				if doc, ok := v.Get("doc").(string); ok && doc != "" {
+					task.Description = doc
+				}
+				return task
+			},
+		),
+		// Task without comment
+		g.task,
+	)
+
 	// Define top-level element
 	g.topLevelElement = p.Action(
 		p.Seq(
 			g.ws,
 			p.Named("element", p.Or(
-				g.comment,
+				g.taskWithDoc, // Try task with doc first
 				g.fileNamespaceDirective,
 				g.variable,
-				g.task,
 				g.namespace,
+				g.comment, // Standalone comments last
 			)),
 		),
 		func(v p.Values) any {

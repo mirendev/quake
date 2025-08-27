@@ -82,7 +82,7 @@ func TestParseExpressionsInCommands(t *testing.T) {
 			result, ok, err := ParseQuakefile(tt.input)
 			require.True(t, ok, "parsing should succeed")
 			require.NoError(t, err, "should not return error")
-			
+
 			require.Len(t, result.Tasks, 1, "should have one task")
 			require.Equal(t, tt.expected, result.Tasks[0].Commands)
 		})
@@ -92,11 +92,11 @@ func TestParseExpressionsInCommands(t *testing.T) {
 func TestParseExpressionsWithSpacing(t *testing.T) {
 	// Test that expressions handle spacing inside {{}}
 	input := `task test { echo {{ env.API_KEY || "default" }} }`
-	
+
 	result, ok, err := ParseQuakefile(input)
 	require.True(t, ok, "parsing should succeed")
 	require.NoError(t, err, "should not return error")
-	
+
 	expected := []Command{
 		{Elements: []CommandElement{
 			StringElement{Value: "echo "},
@@ -106,7 +106,7 @@ func TestParseExpressionsWithSpacing(t *testing.T) {
 			}},
 		}},
 	}
-	
+
 	require.Len(t, result.Tasks, 1, "should have one task")
 	require.Equal(t, expected, result.Tasks[0].Commands)
 }
