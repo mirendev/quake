@@ -1,0 +1,23 @@
+# Build the project
+task build {
+    go build -o quake main.go
+}
+
+# Run tests
+task test {
+    go test ./...
+}
+
+# Format code
+task fmt {
+    go fmt ./...
+}
+
+task clean {
+    rm -f quake
+}
+
+# Install the binary
+task install => build {
+    cp quake ~/go/bin/
+}
