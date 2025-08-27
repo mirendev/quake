@@ -21,7 +21,7 @@ func TestParseSimpleTask(t *testing.T) {
 			{
 				Name: "hello",
 				Commands: []Command{
-					{Line: `echo "Hello, World!"`},
+					{Line: `    echo "Hello, World!"`},
 				},
 			},
 		},
@@ -45,7 +45,7 @@ func TestParseTaskWithArguments(t *testing.T) {
 				Name:      "greet",
 				Arguments: []string{"name"},
 				Commands: []Command{
-					{Line: `echo "Hello, $name!"`},
+					{Line: `    echo "Hello, $name!"`},
 				},
 			},
 		},
@@ -70,9 +70,9 @@ func TestParseTaskWithSpecialCommands(t *testing.T) {
 			{
 				Name: "special",
 				Commands: []Command{
-					{Line: `echo "silent command"`, Silent: true},
-					{Line: "false", ContinueOnError: true},
-					{Line: `echo "normal command"`},
+					{Line: `    echo "silent command"`, Silent: true},
+					{Line: `    false`, ContinueOnError: true},
+					{Line: `    echo "normal command"`},
 				},
 			},
 		},
@@ -113,4 +113,166 @@ func TestJSONSerialization(t *testing.T) {
 	err = json.Unmarshal(jsonData, &deserialized)
 	require.NoError(t, err, "should deserialize from JSON")
 	require.Equal(t, result, deserialized, "should round-trip through JSON")
+}
+
+func TestParseSimpleNamespace(t *testing.T) {
+	input := `namespace db {
+    task migrate {
+        echo "Running migrations"
+    }
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		Tasks: []Task{},
+		Namespaces: []Namespace{
+			{
+				Name: "db",
+				Tasks: []Task{
+					{
+						Name: "migrate",
+						Commands: []Command{
+							{Line: `        echo "Running migrations"`},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
+}
+
+func TestParseFileNamespace(t *testing.T) {
+	input := `namespace api
+
+task start {
+    echo "Starting API server"
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		FileNamespace: "api",
+		Tasks: []Task{
+			{
+				Name: "start",
+				Commands: []Command{
+					{Line: `    echo "Starting API server"`},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
+}
+
+func TestParseTaskWithDependencies(t *testing.T) {
+	input := `task deploy => build, test {
+    echo "Deploying..."
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		Tasks: []Task{
+			{
+				Name:         "deploy",
+				Dependencies: []string{"build", "test"},
+				Commands: []Command{
+					{Line: `    echo "Deploying..."`},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
+}
+
+func TestParseTaskWithQuotedBraces(t *testing.T) {
+	input := `task test {
+    echo "This has } inside quotes"
+    echo 'Single quotes with } too'
+    echo "Multiple } braces } in one line"
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		Tasks: []Task{
+			{
+				Name: "test",
+				Commands: []Command{
+					{Line: `    echo "This has } inside quotes"`},
+					{Line: `    echo 'Single quotes with } too'`},
+					{Line: `    echo "Multiple } braces } in one line"`},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
+}
+
+func TestParseTaskWithNestedBraces(t *testing.T) {
+	input := `task complex {
+    if [ -f file.txt ]; then
+        echo "File exists { with braces }"
+    fi
+    echo "Done"
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		Tasks: []Task{
+			{
+				Name: "complex",
+				Commands: []Command{
+					{Line: `    if [ -f file.txt ]; then`},
+					{Line: `        echo "File exists { with braces }"`},
+					{Line: `    fi`},
+					{Line: `    echo "Done"`},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
+}
+
+func TestParseTaskWithJSONInCommand(t *testing.T) {
+	input := `task json {
+    curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com
+    echo "JSON sent"
+}`
+
+	result, ok, err := ParseQuakefile(input)
+	require.True(t, ok, "parsing should succeed")
+	require.NoError(t, err, "should not return error")
+
+	expected := QuakeFile{
+		Tasks: []Task{
+			{
+				Name: "json",
+				Commands: []Command{
+					{Line: `    curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com`},
+					{Line: `    echo "JSON sent"`},
+				},
+			},
+		},
+	}
+
+	require.Equal(t, expected, result)
 }
