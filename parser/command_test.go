@@ -23,10 +23,18 @@ func TestParseBacktickCommands(t *testing.T) {
 		{
 			Name: "deploy",
 			Commands: []Command{
-				{Line: `    echo "Current commit:"`},
-				{Line: "`git rev-parse --short HEAD`", IsCommandSubstitution: true},
-				{Line: `    echo "Current date:"`},
-				{Line: "`date +%Y-%m-%d`", IsCommandSubstitution: true},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Current commit:\""},
+				}},
+				{Elements: []CommandElement{
+					BacktickElement{Command: "git rev-parse --short HEAD"},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Current date:\""},
+				}},
+				{Elements: []CommandElement{
+					BacktickElement{Command: "date +%Y-%m-%d"},
+				}},
 			},
 		},
 	}
@@ -50,9 +58,23 @@ func TestParseBacktickWithPrefixes(t *testing.T) {
 		{
 			Name: "info",
 			Commands: []Command{
-				{Line: "`echo \"Silent command\"`", Silent: true, IsCommandSubstitution: true},
-				{Line: "`false || true`", ContinueOnError: true, IsCommandSubstitution: true},
-				{Line: "`pwd`", IsCommandSubstitution: true},
+				{
+					Elements: []CommandElement{
+						BacktickElement{Command: "echo \"Silent command\""},
+					},
+					Silent: true,
+				},
+				{
+					Elements: []CommandElement{
+						BacktickElement{Command: "false || true"},
+					},
+					ContinueOnError: true,
+				},
+				{
+					Elements: []CommandElement{
+						BacktickElement{Command: "pwd"},
+					},
+				},
 			},
 		},
 	}
@@ -78,11 +100,21 @@ func TestParseMixedCommandsAndBackticks(t *testing.T) {
 		{
 			Name: "build",
 			Commands: []Command{
-				{Line: `    echo "Building..."`},
-				{Line: "`make clean`", IsCommandSubstitution: true},
-				{Line: `    make build`},
-				{Line: "`make test`", IsCommandSubstitution: true},
-				{Line: `    echo "Done"`},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Building...\""},
+				}},
+				{Elements: []CommandElement{
+					BacktickElement{Command: "make clean"},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: "make build"},
+				}},
+				{Elements: []CommandElement{
+					BacktickElement{Command: "make test"},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Done\""},
+				}},
 			},
 		},
 	}

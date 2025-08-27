@@ -28,8 +28,9 @@ func TestParseBasicQuakefile(t *testing.T) {
 	require.Len(t, result.Tasks, 1, "should have one task")
 	require.Equal(t, "default", result.Tasks[0].Name, "task name should be default")
 	require.Len(t, result.Tasks[0].Commands, 2, "should have two commands")
-	require.Equal(t, `    echo "Running default task"`, result.Tasks[0].Commands[0].Line)
-	require.Equal(t, `    echo "This is the default action"`, result.Tasks[0].Commands[1].Line)
+	// Check command elements
+	require.Len(t, result.Tasks[0].Commands[0].Elements, 1)
+	require.Len(t, result.Tasks[0].Commands[1].Elements, 1)
 
 	// Test JSON serialization
 	jsonData, err := json.MarshalIndent(result, "", "  ")
@@ -57,7 +58,9 @@ func TestParseHelloTask(t *testing.T) {
 			{
 				Name: "hello",
 				Commands: []Command{
-					{Line: `    echo "Hello, World!"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Hello, World!\""},
+					}},
 				},
 			},
 		},
@@ -85,8 +88,14 @@ func TestParseGreetPersonTask(t *testing.T) {
 				Name:      "greet_person",
 				Arguments: []string{"name"},
 				Commands: []Command{
-					{Line: `    echo "Hello, $name!"`},
-					{Line: `    echo "Nice to meet you"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Hello, "},
+						VariableElement{Name: "name"},
+						StringElement{Value: "!\""},
+					}},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Nice to meet you\""},
+					}},
 				},
 			},
 		},

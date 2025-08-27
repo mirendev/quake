@@ -29,7 +29,13 @@ task info {
 			{
 				Name: "info",
 				Commands: []Command{
-					{Line: `    echo "App: $APP_NAME v$VERSION"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"App: "},
+						VariableElement{Name: "APP_NAME"},
+						StringElement{Value: " v"},
+						VariableElement{Name: "VERSION"},
+						StringElement{Value: "\""},
+					}},
 				},
 			},
 		},
@@ -61,8 +67,16 @@ task version {
 			{
 				Name: "version",
 				Commands: []Command{
-					{Line: `    echo "Commit: $GIT_COMMIT"`},
-					{Line: `    echo "Date: $BUILD_DATE"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Commit: "},
+						VariableElement{Name: "GIT_COMMIT"},
+						StringElement{Value: "\""},
+					}},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Date: "},
+						VariableElement{Name: "BUILD_DATE"},
+						StringElement{Value: "\""},
+					}},
 				},
 			},
 		},
@@ -94,8 +108,16 @@ task deploy {
 			{
 				Name: "deploy",
 				Commands: []Command{
-					{Line: `    echo "Env: $DEPLOY_ENV"`},
-					{Line: `    echo "Key: $API_KEY"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Env: "},
+						VariableElement{Name: "DEPLOY_ENV"},
+						StringElement{Value: "\""},
+					}},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Key: "},
+						VariableElement{Name: "API_KEY"},
+						StringElement{Value: "\""},
+					}},
 				},
 			},
 		},
@@ -134,7 +156,11 @@ task help {
 			{
 				Name: "help",
 				Commands: []Command{
-					{Line: `    echo "$HELP_TEXT"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \""},
+						VariableElement{Name: "HELP_TEXT"},
+						StringElement{Value: "\""},
+					}},
 				},
 			},
 		},
@@ -160,8 +186,15 @@ func TestParseTaskLocalVariables(t *testing.T) {
 				Name:      "build",
 				Arguments: []string{"target"},
 				Commands: []Command{
-					{Line: `    TARGET = {{target || "release"}}`},
-					{Line: `    echo "Building $TARGET"`},
+					{Elements: []CommandElement{
+						StringElement{Value: "TARGET = "},
+						ExpressionElement{Expression: `target || "release"`},
+					}},
+					{Elements: []CommandElement{
+						StringElement{Value: "echo \"Building "},
+						VariableElement{Name: "TARGET"},
+						StringElement{Value: "\""},
+					}},
 				},
 			},
 		},
@@ -198,7 +231,13 @@ func TestParseNamespaceVariables(t *testing.T) {
 					{
 						Name: "build",
 						Commands: []Command{
-							{Line: `        echo "Building $IMAGE_NAME:$IMAGE_TAG"`},
+							{Elements: []CommandElement{
+								StringElement{Value: "echo \"Building "},
+								VariableElement{Name: "IMAGE_NAME"},
+								StringElement{Value: ":"},
+								VariableElement{Name: "IMAGE_TAG"},
+								StringElement{Value: "\""},
+							}},
 						},
 					},
 				},

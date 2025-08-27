@@ -33,6 +33,14 @@ type Grammar struct {
 	requiredSpace          p.Rule
 	content                p.Rule
 	balancedBraceContent   p.Rule
+	// Command parsing rules
+	commandLine       p.Rule
+	commandElement    p.Rule
+	commandElements   p.Rule
+	plainText         p.Rule
+	backtickCmd       p.Rule
+	variableRef       p.Rule
+	expressionElement p.Rule
 }
 
 // NewGrammar creates and initializes a new grammar
@@ -535,6 +543,110 @@ func (g *Grammar) init() {
 			return qf
 		},
 	)
+
+	// Define command parsing rules
+	// Variable reference: $NAME
+	g.variableRef = p.Action(
+		p.Seq(
+			p.S("$"),
+			p.Named("name", p.Transform(
+				p.Plus(p.Or(
+					p.Range('a', 'z'),
+					p.Range('A', 'Z'),
+					p.Range('0', '9'),
+					p.S("_"),
+				)),
+				func(s string) any { return s },
+			)),
+		),
+		func(v p.Values) any {
+			return VariableElement{Name: v.Get("name").(string)}
+		},
+	)
+
+	// Expression: {{expr}}
+	g.expressionElement = p.Action(
+		p.Seq(
+			p.S("{{"),
+			p.Named("expr", p.Transform(
+				p.Star(p.Seq(
+					p.Not(p.S("}}")),
+					p.Any(),
+				)),
+				func(s string) any { return s },
+			)),
+			p.S("}}"),
+		),
+		func(v p.Values) any {
+			return ExpressionElement{Expression: v.Get("expr").(string)}
+		},
+	)
+
+	// Backtick command: `cmd`
+	g.backtickCmd = p.Action(
+		p.Seq(
+			p.S("`"),
+			p.Named("cmd", p.Transform(
+				p.Star(p.Seq(
+					p.Not(p.S("`")),
+					p.Any(),
+				)),
+				func(s string) any { return s },
+			)),
+			p.S("`"),
+		),
+		func(v p.Values) any {
+			return BacktickElement{Command: v.Get("cmd").(string)}
+		},
+	)
+
+	// Plain text that's not a special element
+	g.plainText = p.Transform(
+		p.Plus(p.Seq(
+			p.Not(p.Or(
+				p.S("$"),
+				p.S("{{"),
+				p.S("`"),
+				p.S("\n"),
+				p.EOS(),
+			)),
+			p.Any(),
+		)),
+		func(s string) any {
+			return StringElement{Value: s}
+		},
+	)
+
+	// A single command element
+	g.commandElement = p.Or(
+		g.expressionElement,
+		g.backtickCmd,
+		g.variableRef,
+		g.plainText,
+	)
+
+	// Command elements (multiple elements)
+	g.commandElements = p.Many(g.commandElement, 0, -1, func(values []any) any {
+		elements := make([]CommandElement, 0, len(values))
+		for _, v := range values {
+			if elem, ok := v.(CommandElement); ok {
+				elements = append(elements, elem)
+			}
+		}
+		return elements
+	})
+
+	// A complete command line
+	g.commandLine = p.Action(
+		p.Seq(
+			p.Named("elements", g.commandElements),
+			p.Or(p.S("\n"), p.EOS()),
+		),
+		func(v p.Values) any {
+			elements := v.Get("elements").([]CommandElement)
+			return Command{Elements: elements}
+		},
+	)
 }
 
 // ParseQuakefile parses a Quakefile string and returns the AST
@@ -561,6 +673,10 @@ type FileNamespaceDirective struct {
 
 // Helper function to parse commands from content string
 func parseCommands(content string) []Command {
+	// Create a parser with the command line grammar
+	parser := p.New()
+	grammar := NewGrammar()
+
 	commands := []Command{}
 	for line := range strings.SplitSeq(content, "\n") {
 		// Only trim trailing whitespace to preserve indentation
@@ -569,40 +685,42 @@ func parseCommands(content string) []Command {
 			continue
 		}
 
-		cmd := Command{Line: line}
-
-		// Handle special prefixes (check the trimmed version for prefixes)
+		// Check for special prefixes
 		trimmedLine := strings.TrimSpace(line)
+		silent := false
+		continueOnError := false
 
-		// Check for backtick command substitution
-		if strings.HasPrefix(trimmedLine, "`") && strings.HasSuffix(trimmedLine, "`") {
-			cmd.IsCommandSubstitution = true
-			cmd.Line = trimmedLine
-		} else if strings.HasPrefix(trimmedLine, "@`") && strings.HasSuffix(trimmedLine, "`") {
-			// Handle @`command` case
-			cmd.Silent = true
-			cmd.IsCommandSubstitution = true
-			cmd.Line = strings.TrimSpace(trimmedLine[1:])
-		} else if strings.HasPrefix(trimmedLine, "-`") && strings.HasSuffix(trimmedLine, "`") {
-			// Handle -`command` case
-			cmd.ContinueOnError = true
-			cmd.IsCommandSubstitution = true
-			cmd.Line = strings.TrimSpace(trimmedLine[1:])
-		} else if strings.HasPrefix(trimmedLine, "@") {
-			cmd.Silent = true
-			// Preserve indentation when removing the @ prefix
-			leadingSpace := line[:len(line)-len(trimmedLine)]
-			cmd.Line = leadingSpace + strings.TrimSpace(trimmedLine[1:])
+		// Handle special prefixes
+		if strings.HasPrefix(trimmedLine, "@") {
+			silent = true
+			trimmedLine = strings.TrimSpace(trimmedLine[1:])
 		} else if strings.HasPrefix(trimmedLine, "-") {
-			cmd.ContinueOnError = true
-			// Preserve indentation when removing the - prefix
-			leadingSpace := line[:len(line)-len(trimmedLine)]
-			cmd.Line = leadingSpace + strings.TrimSpace(trimmedLine[1:])
+			continueOnError = true
+			trimmedLine = strings.TrimSpace(trimmedLine[1:])
 		}
 
-		if cmd.Line != "" || line != "" {
-			commands = append(commands, cmd)
+		// Parse the command line using PEG grammar
+		result, ok, _ := parser.Parse(grammar.commandElements, trimmedLine, p.WithErrors())
+
+		var elements []CommandElement
+		if ok && result != nil {
+			if elems, ok := result.([]CommandElement); ok {
+				elements = elems
+			} else {
+				// Fallback to simple string if parsing fails
+				elements = []CommandElement{StringElement{Value: trimmedLine}}
+			}
+		} else {
+			// If parsing fails, treat the whole line as a string
+			elements = []CommandElement{StringElement{Value: trimmedLine}}
 		}
+
+		cmd := Command{
+			Elements:        elements,
+			Silent:          silent,
+			ContinueOnError: continueOnError,
+		}
+		commands = append(commands, cmd)
 	}
 	return commands
 }

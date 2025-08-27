@@ -30,7 +30,9 @@ func TestParseSimpleTask(t *testing.T) {
 		{
 			Name: "hello",
 			Commands: []Command{
-				{Line: `    echo "Hello, World!"`},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Hello, World!\""},
+				}},
 			},
 		},
 	}
@@ -53,7 +55,11 @@ func TestParseTaskWithArguments(t *testing.T) {
 			Name:      "greet",
 			Arguments: []string{"name"},
 			Commands: []Command{
-				{Line: `    echo "Hello, $name!"`},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Hello, "},
+					VariableElement{Name: "name"},
+					StringElement{Value: "!\""},
+				}},
 			},
 		},
 	}
@@ -77,9 +83,23 @@ func TestParseTaskWithSpecialCommands(t *testing.T) {
 		{
 			Name: "special",
 			Commands: []Command{
-				{Line: `    echo "silent command"`, Silent: true},
-				{Line: `    false`, ContinueOnError: true},
-				{Line: `    echo "normal command"`},
+				{
+					Elements: []CommandElement{
+						StringElement{Value: "echo \"silent command\""},
+					},
+					Silent: true,
+				},
+				{
+					Elements: []CommandElement{
+						StringElement{Value: "false"},
+					},
+					ContinueOnError: true,
+				},
+				{
+					Elements: []CommandElement{
+						StringElement{Value: "echo \"normal command\""},
+					},
+				},
 			},
 		},
 	}
@@ -138,7 +158,9 @@ func TestParseSimpleNamespace(t *testing.T) {
 				{
 					Name: "migrate",
 					Commands: []Command{
-						{Line: `        echo "Running migrations"`},
+						{Elements: []CommandElement{
+							StringElement{Value: "echo \"Running migrations\""},
+						}},
 					},
 				},
 			},
@@ -167,7 +189,9 @@ task start {
 		{
 			Name: "start",
 			Commands: []Command{
-				{Line: `    echo "Starting API server"`},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Starting API server\""},
+				}},
 			},
 		},
 	}
@@ -190,7 +214,9 @@ func TestParseTaskWithDependencies(t *testing.T) {
 			Name:         "deploy",
 			Dependencies: []string{"build", "test"},
 			Commands: []Command{
-				{Line: `    echo "Deploying..."`},
+				{Elements: []CommandElement{
+					StringElement{Value: "echo \"Deploying...\""},
+				}},
 			},
 		},
 	}
@@ -214,9 +240,15 @@ func TestParseTaskWithQuotedBraces(t *testing.T) {
 		{
 			Name: "test",
 			Commands: []Command{
-				{Line: `    echo "This has } inside quotes"`},
-				{Line: `    echo 'Single quotes with } too'`},
-				{Line: `    echo "Multiple } braces } in one line"`},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo "This has } inside quotes"`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo 'Single quotes with } too'`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo "Multiple } braces } in one line"`},
+				}},
 			},
 		},
 	}
@@ -241,10 +273,18 @@ func TestParseTaskWithNestedBraces(t *testing.T) {
 		{
 			Name: "complex",
 			Commands: []Command{
-				{Line: `    if [ -f file.txt ]; then`},
-				{Line: `        echo "File exists { with braces }"`},
-				{Line: `    fi`},
-				{Line: `    echo "Done"`},
+				{Elements: []CommandElement{
+					StringElement{Value: `if [ -f file.txt ]; then`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo "File exists { with braces }"`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `fi`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo "Done"`},
+				}},
 			},
 		},
 	}
@@ -267,8 +307,12 @@ func TestParseTaskWithJSONInCommand(t *testing.T) {
 		{
 			Name: "json",
 			Commands: []Command{
-				{Line: `    curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com`},
-				{Line: `    echo "JSON sent"`},
+				{Elements: []CommandElement{
+					StringElement{Value: `curl -d '{"key": "value", "nested": {"inner": "data"}}' api.com`},
+				}},
+				{Elements: []CommandElement{
+					StringElement{Value: `echo "JSON sent"`},
+				}},
 			},
 		},
 	}

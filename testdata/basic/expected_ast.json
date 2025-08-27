@@ -4,10 +4,20 @@
       "name": "default",
       "commands": [
         {
-          "line": "    echo \"Running default task\""
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"Running default task\""
+            }
+          ]
         },
         {
-          "line": "    echo \"This is the default action\""
+          "elements": [
+            {
+              "type": "string",
+              "value": "echo \"This is the default action\""
+            }
+          ]
         }
       ]
     }
