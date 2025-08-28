@@ -13,6 +13,7 @@ import (
 type Evaluator struct {
 	quakefile *parser.QuakeFile
 	env       map[string]string
+	taskArgs  []string // Arguments passed to the current task
 }
 
 // New creates a new evaluator
@@ -23,8 +24,13 @@ func New(quakefile *parser.QuakeFile) *Evaluator {
 	}
 }
 
-// RunTask executes a specific task by name
+// RunTask executes a specific task by name (without arguments)
 func (e *Evaluator) RunTask(taskName string) error {
+	return e.RunTaskWithArgs(taskName, nil)
+}
+
+// RunTaskWithArgs executes a specific task by name with arguments
+func (e *Evaluator) RunTaskWithArgs(taskName string, args []string) error {
 	// Handle default task if no name provided
 	if taskName == "" {
 		taskName = "default"
@@ -36,7 +42,24 @@ func (e *Evaluator) RunTask(taskName string) error {
 		return fmt.Errorf("task '%s' not found", taskName)
 	}
 
-	// Execute dependencies first
+	// Note: We allow fewer arguments than defined - they'll just be empty strings
+	// This allows for optional arguments with default values using || in expressions
+
+	// Save current args and restore after task execution
+	oldArgs := e.taskArgs
+	e.taskArgs = args
+	defer func() { e.taskArgs = oldArgs }()
+
+	// Set up argument variables
+	for i, argName := range task.Arguments {
+		if i < len(args) {
+			e.env[argName] = args[i]
+		} else {
+			e.env[argName] = ""
+		}
+	}
+
+	// Execute dependencies first (without arguments)
 	for _, dep := range task.Dependencies {
 		if err := e.RunTask(dep); err != nil {
 			return fmt.Errorf("dependency '%s' failed: %w", dep, err)
@@ -45,6 +68,9 @@ func (e *Evaluator) RunTask(taskName string) error {
 
 	// Execute the task
 	fmt.Printf("Running task: %s\n", taskName)
+	if len(args) > 0 {
+		fmt.Printf("  with arguments: %v\n", args)
+	}
 	return e.executeTask(task)
 }
 

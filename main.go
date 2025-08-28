@@ -23,15 +23,19 @@ func main() {
 		return
 	}
 
-	// Get task name from remaining arguments
+	// Get task name and arguments from remaining arguments
 	args := flag.Args()
 	taskName := ""
+	var taskArgs []string
 	if len(args) > 0 {
 		taskName = args[0]
+		if len(args) > 1 {
+			taskArgs = args[1:]
+		}
 	}
 
-	// Run the task
-	if err := runTask(taskName); err != nil {
+	// Run the task with arguments
+	if err := runTask(taskName, taskArgs); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -118,7 +122,7 @@ func getFirstLine(description string) string {
 	return ""
 }
 
-func runTask(taskName string) error {
+func runTask(taskName string, args []string) error {
 	// Look for Quakefile in current directory
 	quakefilePath := "Quakefile"
 	if _, err := os.Stat(quakefilePath); os.IsNotExist(err) {
@@ -140,7 +144,7 @@ func runTask(taskName string) error {
 		return fmt.Errorf("error parsing Quakefile: %w", err)
 	}
 
-	// Create evaluator and run task
+	// Create evaluator and run task with arguments
 	eval := evaluator.New(&result)
-	return eval.RunTask(taskName)
+	return eval.RunTaskWithArgs(taskName, args)
 }
