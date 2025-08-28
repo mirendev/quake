@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"miren.dev/quake/internal/color"
@@ -78,17 +79,17 @@ func (e *Evaluator) RunTaskWithArgs(taskName string, args []string) error {
 
 // findTask locates a task by name, checking namespaces if needed
 func (e *Evaluator) findTask(name string) *parser.Task {
-	// Check if it's a namespaced task (contains ':')
-	if strings.Contains(name, ":") {
-		parts := strings.Split(name, ":")
-		return e.findNamespacedTask(parts, e.quakefile.Namespaces)
-	}
-
-	// Look in top-level tasks
+	// First, look in top-level tasks (including flattened namespace:name tasks)
 	for i := range e.quakefile.Tasks {
 		if e.quakefile.Tasks[i].Name == name {
 			return &e.quakefile.Tasks[i]
 		}
+	}
+
+	// If not found and contains ':', also check actual namespace structures
+	if strings.Contains(name, ":") {
+		parts := strings.Split(name, ":")
+		return e.findNamespacedTask(parts, e.quakefile.Namespaces)
 	}
 
 	return nil
@@ -122,6 +123,11 @@ func (e *Evaluator) findNamespacedTask(parts []string, namespaces []parser.Names
 
 // executeTask runs all commands in a task
 func (e *Evaluator) executeTask(task *parser.Task) error {
+	// Handle Go tasks differently
+	if task.IsGoTask {
+		return e.executeGoTask(task)
+	}
+
 	for i, cmd := range task.Commands {
 		isLastCommand := i == len(task.Commands)-1
 		if err := e.executeCommandWithPosition(cmd, isLastCommand); err != nil {
@@ -132,6 +138,36 @@ func (e *Evaluator) executeTask(task *parser.Task) error {
 			fmt.Printf("Warning: command failed but continuing: %v\n", err)
 		}
 	}
+	return nil
+}
+
+// executeGoTask runs a Go task by invoking go run with the dispatcher
+func (e *Evaluator) executeGoTask(task *parser.Task) error {
+	if task.GoDispatcher == "" {
+		return fmt.Errorf("Go task '%s' has no dispatcher", task.Name)
+	}
+
+	if task.GoSourceDir == "" {
+		return fmt.Errorf("Go task '%s' has no source directory", task.Name)
+	}
+
+	// Build command arguments: go run <dir> taskname args...
+	// This will compile all .go files in the directory together
+	// Use absolute path to the Go source directory
+	qtasksPath, _ := filepath.Abs(task.GoSourceDir)
+	args := []string{"run", qtasksPath, task.Name}
+	args = append(args, e.taskArgs...)
+
+	// Execute using go run from the project root
+	cmd := exec.Command("go", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("Go task failed: %w", err)
+	}
+
 	return nil
 }
 

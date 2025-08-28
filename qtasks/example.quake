@@ -1,0 +1,19 @@
+# Example .quake file in qtasks directory
+
+task hello {
+  # Say hello
+  echo "Hello from qtasks!"
+}
+
+namespace dev {
+  task setup {
+    # Setup development environment
+    echo "Setting up dev environment"
+    go mod download
+  }
+  
+  task run(port) {
+    # Run the development server
+    echo "Starting server on port {{port || "8080"}}"
+  }
+}

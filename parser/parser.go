@@ -117,6 +117,7 @@ func (g *Grammar) init() {
 			)),
 			p.S("'"),
 		),
+		p.S("{}"), // Empty braces
 		// Nested braces
 		p.Seq(
 			p.S("{"),
@@ -855,6 +856,11 @@ func (g *Grammar) init() {
 
 // ParseQuakefile parses a Quakefile string and returns the AST
 func ParseQuakefile(input string) (QuakeFile, bool, error) {
+	return ParseQuakefileWithSource(input, "")
+}
+
+// ParseQuakefileWithSource parses a Quakefile and tracks the source file
+func ParseQuakefileWithSource(input string, sourceFile string) (QuakeFile, bool, error) {
 	parser := p.New()
 	grammar := NewGrammar()
 	result, ok, err := parser.Parse(grammar.quakeFile, input, p.WithErrors())
@@ -867,7 +873,28 @@ func ParseQuakefile(input string) (QuakeFile, bool, error) {
 		return QuakeFile{Tasks: []Task{}}, true, nil
 	}
 
-	return result.(QuakeFile), true, nil
+	quakeFile := result.(QuakeFile)
+	
+	// Set source file for all tasks if provided
+	if sourceFile != "" {
+		for i := range quakeFile.Tasks {
+			quakeFile.Tasks[i].SourceFile = sourceFile
+		}
+		// Also set for tasks in namespaces
+		setNamespaceTaskSourceFile(quakeFile.Namespaces, sourceFile)
+	}
+
+	return quakeFile, true, nil
+}
+
+// Helper to recursively set source file for namespace tasks
+func setNamespaceTaskSourceFile(namespaces []Namespace, sourceFile string) {
+	for i := range namespaces {
+		for j := range namespaces[i].Tasks {
+			namespaces[i].Tasks[j].SourceFile = sourceFile
+		}
+		setNamespaceTaskSourceFile(namespaces[i].Namespaces, sourceFile)
+	}
 }
 
 // FileNamespaceDirective represents a file-level namespace directive
