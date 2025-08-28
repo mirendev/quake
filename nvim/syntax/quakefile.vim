@@ -27,17 +27,10 @@ syn match quakeVariable "\$\w\+"
 " Arrow operator - match it globally in task lines
 syn match quakeArrow "=>" contained
 
-" Task declaration patterns
-" NOTE: Order matters - more specific patterns must come before general ones
-" Task with arguments and dependencies
-syn match quakeTaskWithArgsDeps "^\s*task\s\+\w\+\s*([^)]*)\s*=>.*{" contains=quakeKeyword,quakeTaskName,quakeArguments,quakeArrow,quakeDependencyList,quakeBrace
-" Task with arguments
-syn match quakeTaskWithArgs "^\s*task\s\+\w\+\s*([^)]*)\s*{" contains=quakeKeyword,quakeTaskName,quakeArguments,quakeBrace
-" Task with dependencies and body
-syn match quakeTaskWithDeps "^\s*task\s\+\w\+\s*=>.*{" contains=quakeKeyword,quakeTaskName,quakeArrow,quakeDependencyList,quakeBrace
-" Simple task
-syn match quakeTaskSimple "^\s*task\s\+\w\+\s*{" contains=quakeKeyword,quakeTaskName,quakeBrace
-" Bodyless task (dependencies only - no opening brace on same line)
+" Task declaration with body
+syn region quakeTaskDecl start="^\s*task\s\+\w\+" end="}" contains=quakeKeyword,quakeTaskName,quakeArguments,quakeArrow,quakeDependencyList,quakeTaskBody,quakeBrace
+
+" Bodyless task (dependencies only - no opening brace)
 syn match quakeTaskBodyless "^\s*task\s\+\w\+\s*=>[^{]*$" contains=quakeKeyword,quakeTaskName,quakeArrow,quakeDependencyList
 
 " Components
@@ -58,27 +51,24 @@ syn match quakeComma "," contained
 " Namespace blocks
 syn region quakeNamespaceBlock start="^\s*namespace\s\+\w\+\s*{" end="^\s*}" fold transparent contains=ALL
 
-" Task/namespace body content
-syn region quakeBody start="{" end="}" fold contains=quakeCommand,quakeComment,quakeVariableAssign,quakeVariable,@quakeCommandElements,quakeBrace
+" Task bodies - region from { to }
+syn region quakeTaskBody start="{" end="}" contained contains=quakeCommand,quakeComment,quakeVariableAssign,quakeVariable
 
-" Command content cluster
-syn cluster quakeCommandElements contains=quakeString,quakeBacktick,quakeExpression,quakeVariable
-
-" Commands in task body
-syn match quakeCommand "^\s*[^#].*$" contained contains=@quakeCommandElements,quakeSilentPrefix,quakeContinuePrefix
+" Commands in task body (not comments or closing braces)
+syn match quakeCommand "^\s*[^#}].*$" contained contains=quakeSilentPrefix,quakeContinuePrefix,quakeString,quakeBacktick,quakeExpression,quakeVariable
 
 " Special command prefixes
 syn match quakeSilentPrefix "^\s*@" contained
 syn match quakeContinuePrefix "^\s*-" contained
 
-" Strings
-syn region quakeString start='"' skip='\\"' end='"' contained
-syn region quakeString start="'" skip="\\'" end="'" contained
-syn region quakeMultilineString start='"""' end='"""'
+" Strings - only in command content
+syn region quakeString start='"' skip='\\"' end='"' contained oneline
+syn region quakeString start="'" skip="\\'" end="'" contained oneline
+syn region quakeMultilineString start='"""' end='"""' contained
 
 " Expressions
-syn region quakeExpression start="{{" end="}}" contained contains=quakeExpressionInner
-syn match quakeExpressionInner "[^}]\+" contained contains=quakeExprOr,quakeExprDot
+syn region quakeExpression start="{{" end="}}" contained contains=quakeExpressionInner,quakeExprOr,quakeExprDot
+syn match quakeExpressionInner "[a-zA-Z0-9_]\+" contained
 syn match quakeExprOr "||" contained
 syn match quakeExprDot "\." contained
 
