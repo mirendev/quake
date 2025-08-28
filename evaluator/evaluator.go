@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"miren.dev/quake/internal/color"
 	"miren.dev/quake/parser"
 )
 
@@ -67,9 +68,10 @@ func (e *Evaluator) RunTaskWithArgs(taskName string, args []string) error {
 	}
 
 	// Execute the task
-	fmt.Printf("Running task: %s\n", taskName)
 	if len(args) > 0 {
-		fmt.Printf("  with arguments: %v\n", args)
+		fmt.Printf("%s [ %s %s ]\n", color.FaintText("┌────"), color.BoldText(taskName), strings.Join(args, ", "))
+	} else {
+		fmt.Printf("%s [ %s ]\n", color.FaintText("┌────"), color.BoldText(taskName))
 	}
 	return e.executeTask(task)
 }
@@ -120,8 +122,9 @@ func (e *Evaluator) findNamespacedTask(parts []string, namespaces []parser.Names
 
 // executeTask runs all commands in a task
 func (e *Evaluator) executeTask(task *parser.Task) error {
-	for _, cmd := range task.Commands {
-		if err := e.executeCommand(cmd); err != nil {
+	for i, cmd := range task.Commands {
+		isLastCommand := i == len(task.Commands)-1
+		if err := e.executeCommandWithPosition(cmd, isLastCommand); err != nil {
 			if !cmd.ContinueOnError {
 				return err
 			}
@@ -132,8 +135,13 @@ func (e *Evaluator) executeTask(task *parser.Task) error {
 	return nil
 }
 
-// executeCommand runs a single command
+// executeCommand runs a single command (for backward compatibility)
 func (e *Evaluator) executeCommand(cmd parser.Command) error {
+	return e.executeCommandWithPosition(cmd, true)
+}
+
+// executeCommandWithPosition runs a single command with position info
+func (e *Evaluator) executeCommandWithPosition(cmd parser.Command, isLast bool) error {
 	// Convert command to string
 	cmdStr := e.commandToString(cmd)
 
@@ -141,7 +149,11 @@ func (e *Evaluator) executeCommand(cmd parser.Command) error {
 	if cmd.Silent {
 		// Don't print the command
 	} else {
-		fmt.Printf("  $ %s\n", cmdStr)
+		prefix := "├"
+		if isLast {
+			prefix = "└"
+		}
+		fmt.Printf("%s %s\n", color.FaintText(prefix), cmdStr)
 	}
 
 	// Execute via shell

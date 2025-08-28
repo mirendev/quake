@@ -23,21 +23,49 @@ func main() {
 		return
 	}
 
-	// Get task name and arguments from remaining arguments
+	// Parse arguments to support multiple tasks separated by --
 	args := flag.Args()
-	taskName := ""
-	var taskArgs []string
-	if len(args) > 0 {
-		taskName = args[0]
-		if len(args) > 1 {
-			taskArgs = args[1:]
+	
+	// Split arguments into groups separated by --
+	var taskGroups [][]string
+	currentGroup := []string{}
+	
+	for _, arg := range args {
+		if arg == "--" {
+			if len(currentGroup) > 0 {
+				taskGroups = append(taskGroups, currentGroup)
+				currentGroup = []string{}
+			}
+		} else {
+			currentGroup = append(currentGroup, arg)
 		}
 	}
+	// Add the last group if not empty
+	if len(currentGroup) > 0 {
+		taskGroups = append(taskGroups, currentGroup)
+	}
 
-	// Run the task with arguments
-	if err := runTask(taskName, taskArgs); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	// If no tasks specified, run default
+	if len(taskGroups) == 0 {
+		if err := runTask("", nil); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Execute each task group in sequence
+	for _, group := range taskGroups {
+		taskName := group[0]
+		var taskArgs []string
+		if len(group) > 1 {
+			taskArgs = group[1:]
+		}
+		
+		if err := runTask(taskName, taskArgs); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	}
 }
 

@@ -24,3 +24,11 @@ task clean {
 task install => build {
     cp quake ~/go/bin/
 }
+
+# Test task with multiple commands
+task multi {
+    echo "First command"
+    echo "Second command"  
+    echo "Third command"
+    echo "Last command"
+}
