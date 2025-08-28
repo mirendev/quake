@@ -87,6 +87,8 @@ func (g *Grammar) init() {
 			p.S("_"),
 			p.S(":"),
 			p.S("."),
+			p.S("-"),
+			p.S("/"),
 		)),
 		func(s string) any {
 			return s
