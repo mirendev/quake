@@ -217,6 +217,18 @@ func (e *Evaluator) expressionToString(expr parser.Expression) string {
 	case parser.StringLiteral:
 		return ex.Value
 	case parser.AccessId:
+		switch fmt.Sprint(ex.Object) {
+		case "env":
+			// Look up in environment
+			if val, ok := e.env[ex.Property]; ok {
+				return val
+			}
+			if val, ok := os.LookupEnv(ex.Property); ok {
+				return val
+			}
+			return ""
+		}
+
 		// For now, just return empty string for complex expressions
 		// This will be implemented properly later
 		return ""
