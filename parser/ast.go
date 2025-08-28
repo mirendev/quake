@@ -46,8 +46,8 @@ type Task struct {
 	Commands     []Command `json:"commands"`
 	IsGoTask     bool      `json:"is_go_task,omitempty"`
 	GoDispatcher string    `json:"go_dispatcher,omitempty"` // Path to dispatcher main.go
-	GoSourceDir  string    `json:"go_source_dir,omitempty"`  // Directory containing Go sources
-	SourceFile   string    `json:"source_file,omitempty"`    // Source file where task is defined
+	GoSourceDir  string    `json:"go_source_dir,omitempty"` // Directory containing Go sources
+	SourceFile   string    `json:"source_file,omitempty"`   // Source file where task is defined
 }
 
 // Variable represents a variable assignment

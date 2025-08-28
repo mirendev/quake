@@ -97,7 +97,7 @@ func ShowAST(files ...string) error {
 	}
 
 	fmt.Printf("=== Quakefile AST for %s ===\n\n", file)
-	
+
 	// Show tasks
 	fmt.Printf("Tasks (%d):\n", len(result.Tasks))
 	for _, task := range result.Tasks {

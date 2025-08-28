@@ -874,7 +874,7 @@ func ParseQuakefileWithSource(input string, sourceFile string) (QuakeFile, bool,
 	}
 
 	quakeFile := result.(QuakeFile)
-	
+
 	// Set source file for all tasks if provided
 	if sourceFile != "" {
 		for i := range quakeFile.Tasks {

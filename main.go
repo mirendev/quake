@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"miren.dev/quake/evaluator"
@@ -26,9 +30,19 @@ func realMain() int {
 
 	var listTasks bool
 	var verbose bool
+	var generateTask bool
 	flag.BoolVar(&listTasks, "l", false, "List all tasks with their documentation")
 	flag.BoolVar(&verbose, "v", false, "Verbose output (show source file locations with -l)")
+	flag.BoolVar(&generateTask, "g", false, "Generate a new task using Claude AI")
 	flag.Parse()
+
+	if generateTask {
+		if err := generateTaskWithClaude(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 
 	if listTasks {
 		if err := listAllTasks(verbose); err != nil {
@@ -422,4 +436,198 @@ func runTask(taskName string, args []string) error {
 	// Create evaluator and run task with arguments
 	eval := evaluator.New(&result)
 	return eval.RunTaskWithArgs(taskName, args)
+}
+
+// extractTaskFromOutput extracts a task definition from Claude's output
+// It handles both plain output and markdown code blocks
+func extractTaskFromOutput(output string) string {
+	output = strings.TrimSpace(output)
+
+	// First, check if the output is wrapped in code blocks
+	// Pattern for ```quake or ``` blocks
+	codeBlockRe := regexp.MustCompile("(?s)```(?:quake.*)?\\s*\n(.*?)```")
+	matches := codeBlockRe.FindStringSubmatch(output)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+
+	// If no code blocks, check if it starts with "task" (valid task definition)
+	if strings.HasPrefix(output, "task ") || strings.HasPrefix(output, "#") {
+		// It looks like a raw task definition
+		return output
+	}
+
+	// Try to find a task definition anywhere in the output
+	// Look for lines starting with "task "
+	lines := strings.Split(output, "\n")
+	var taskLines []string
+	inTask := false
+	braceCount := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Start capturing when we see "task "
+		if !inTask && strings.HasPrefix(trimmed, "task ") {
+			inTask = true
+			taskLines = append(taskLines, line)
+			// Count braces in the first line
+			braceCount += strings.Count(line, "{") - strings.Count(line, "}")
+			continue
+		}
+
+		// If we're in a task, keep capturing
+		if inTask {
+			taskLines = append(taskLines, line)
+			braceCount += strings.Count(line, "{") - strings.Count(line, "}")
+
+			// Stop when braces are balanced
+			if braceCount == 0 {
+				break
+			}
+		}
+	}
+
+	if len(taskLines) > 0 {
+		return strings.Join(taskLines, "\n")
+	}
+
+	// If nothing worked, return the original output and let the user see it
+	return output
+}
+
+// generateTaskWithClaude prompts the user for a task description and uses Claude to generate it
+func generateTaskWithClaude() error {
+	// Check if claude CLI is available
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		// Try common locations
+		possiblePaths := []string{
+			"/usr/local/bin/claude",
+			"/usr/bin/claude",
+			filepath.Join(os.Getenv("HOME"), "bin", "claude"),
+			filepath.Join(os.Getenv("HOME"), ".local", "bin", "claude"),
+		}
+
+		found := false
+		for _, path := range possiblePaths {
+			if _, err := os.Stat(path); err == nil {
+				claudePath = path
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("claude CLI not found. Please ensure 'claude' is installed and in your PATH")
+		}
+	}
+
+	// Prompt user for task description
+	fmt.Print("Describe the task you want to create: ")
+	reader := bufio.NewReader(os.Stdin)
+	taskDescription, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read task description: %w", err)
+	}
+	taskDescription = strings.TrimSpace(taskDescription)
+
+	if taskDescription == "" {
+		return fmt.Errorf("task description cannot be empty")
+	}
+
+	// Find the Quakefile
+	quakefilePath, err := findQuakefile()
+	if err != nil {
+		return err
+	}
+
+	// Read the current Quakefile
+	currentContent, err := os.ReadFile(quakefilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read Quakefile: %w", err)
+	}
+
+	// Create the prompt for Claude
+	prompt := fmt.Sprintf(`You are a helpful assistant that creates tasks for Quakefile build systems.
+
+QUAKEFILE SYNTAX RULES:
+1. Tasks are defined with: task <name> { ... }
+2. Tasks can have dependencies: task build => test { ... }
+3. Tasks can have arguments: task deploy(environment) { ... }
+4. Tasks can have both: task deploy(env) => build, test { ... }
+5. Commands in tasks are shell commands, one per line
+6. Comments start with #
+7. Variables can be referenced with $VAR or {{expression}}
+8. Command substitution uses backticks: `+"`command`"+`
+9. Silent commands start with @
+10. Continue on error with -
+
+The user wants to add this task: "%s"
+
+Current Quakefile content:
+%s
+
+Please generate ONLY the new task definition to add to this Quakefile.
+
+Requirements:
+- Output ONLY the task code, no explanations
+- Use descriptive comments
+- Follow the existing style and conventions
+- Make the task name appropriate and consistent with existing tasks
+- If the task seems like it should have dependencies on existing tasks, include them`,
+		taskDescription, string(currentContent))
+
+	// Execute claude with the prompt
+	cmd := exec.Command(claudePath, "-p")
+	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Stderr = os.Stderr
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	fmt.Println("Generating task with Claude...")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run claude: %w", err)
+	}
+
+	// Extract the task from the output
+	generatedTask := extractTaskFromOutput(out.String())
+	if generatedTask == "" {
+		return fmt.Errorf("claude returned empty response or no valid task found")
+	}
+
+	// Show the generated task to the user
+	fmt.Println("\nGenerated task:")
+	fmt.Println("---")
+	fmt.Println(generatedTask)
+	fmt.Println("---")
+
+	// Ask for confirmation
+	fmt.Print("\nAdd this task to the Quakefile? (y/n): ")
+	confirmation, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read confirmation: %w", err)
+	}
+	confirmation = strings.ToLower(strings.TrimSpace(confirmation))
+
+	if confirmation != "y" && confirmation != "yes" {
+		fmt.Println("Task not added.")
+		return nil
+	}
+
+	// Append the task to the Quakefile
+	updatedContent := string(currentContent)
+	if !strings.HasSuffix(updatedContent, "\n") {
+		updatedContent += "\n"
+	}
+	updatedContent += "\n" + generatedTask + "\n"
+
+	// Write the updated Quakefile
+	if err := os.WriteFile(quakefilePath, []byte(updatedContent), 0644); err != nil {
+		return fmt.Errorf("failed to write updated Quakefile: %w", err)
+	}
+
+	fmt.Printf("✅ Task added to %s\n", quakefilePath)
+	return nil
 }

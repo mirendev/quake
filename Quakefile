@@ -32,3 +32,10 @@ task multi {
     echo "Third command"
     echo "Last command"
 }
+
+# Run tests with coverage report for each package
+task coverage {
+    go test -coverprofile=coverage.out ./...
+    go tool cover -func=coverage.out
+    rm -f coverage.out
+}
