@@ -185,7 +185,8 @@ func (e *Evaluator) commandToString(cmd parser.Command) string {
 			} else if val, ok := os.LookupEnv(el.Name); ok {
 				parts = append(parts, val)
 			} else {
-				parts = append(parts, "")
+				// If we don't have it, just include as-is (shell will evaluate)
+				parts = append(parts, "$"+el.Name)
 			}
 		case parser.BacktickElement:
 			// For now, include the backtick command as-is (shell will evaluate)
@@ -198,7 +199,7 @@ func (e *Evaluator) commandToString(cmd parser.Command) string {
 		}
 	}
 
-	return strings.Join(parts, " ")
+	return strings.Join(parts, "")
 }
 
 // expressionToString converts an expression to a string (simplified for now)
