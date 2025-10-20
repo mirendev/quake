@@ -286,30 +286,42 @@ func (e *Evaluator) executeNativeEcho(cmd parser.Command) error {
 }
 
 // stripQuotesForEcho removes quotes and expands variables for echo command
+// It handles multiple quoted sections within a single string
 func (e *Evaluator) stripQuotesForEcho(s string, isFirstArg bool) string {
-	// If this is a complete quoted string (has both opening and closing quotes)
-	// Only trim whitespace outside the quotes
 	trimmed := strings.TrimSpace(s)
-	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' {
+
+	// If the entire string is a single quoted section, handle it simply
+	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' && !strings.Contains(trimmed[1:len(trimmed)-1], "\"") {
 		return e.expandShellVariables(trimmed[1 : len(trimmed)-1])
-	} else if len(trimmed) >= 2 && trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'' {
+	} else if len(trimmed) >= 2 && trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'' && !strings.Contains(trimmed[1:len(trimmed)-1], "'") {
 		// Single quotes - no variable expansion
 		return trimmed[1 : len(trimmed)-1]
 	}
 
-	// For partial strings (quote split across elements), don't trim internal whitespace
-	// Strip leading quote if present
-	if len(s) > 0 && (s[0] == '"' || s[0] == '\'') {
-		s = s[1:]
+	// Handle strings with multiple quoted sections or mixed quoted/unquoted parts
+	// Process character by character, removing quotes and expanding variables in double-quoted sections
+	var result strings.Builder
+	inDoubleQuote := false
+	inSingleQuote := false
+
+	for i := 0; i < len(trimmed); i++ {
+		ch := trimmed[i]
+
+		if ch == '"' && !inSingleQuote {
+			// Toggle double quote state, but don't include the quote character
+			inDoubleQuote = !inDoubleQuote
+			continue
+		} else if ch == '\'' && !inDoubleQuote {
+			// Toggle single quote state, but don't include the quote character
+			inSingleQuote = !inSingleQuote
+			continue
+		}
+
+		result.WriteByte(ch)
 	}
 
-	// Strip trailing quote if present
-	if len(s) > 0 && (s[len(s)-1] == '"' || s[len(s)-1] == '\'') {
-		s = s[:len(s)-1]
-	}
-
-	// Expand variables for double-quoted context
-	return e.expandShellVariables(s)
+	// Expand variables in the result (respecting the quoting context)
+	return e.expandShellVariables(result.String())
 }
 
 // unquoteString removes surrounding quotes and expands shell variables

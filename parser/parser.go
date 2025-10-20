@@ -909,9 +909,10 @@ func parseCommands(content string) []Command {
 	grammar := NewGrammar()
 
 	commands := []Command{}
-	for line := range strings.SplitSeq(content, "\n") {
-		// Only trim trailing whitespace to preserve indentation
-		line = strings.TrimRight(line, " \t\r")
+	lines := strings.Split(content, "\n")
+
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimRight(lines[i], " \t\r")
 		if line == "" {
 			continue
 		}
@@ -930,8 +931,25 @@ func parseCommands(content string) []Command {
 			trimmedLine = strings.TrimSpace(trimmedLine[1:])
 		}
 
+		// Check for continuation lines starting with |
+		// Accumulate all continuation lines into a single command
+		fullCommand := trimmedLine
+		for i+1 < len(lines) {
+			nextLine := strings.TrimSpace(lines[i+1])
+			if strings.HasPrefix(nextLine, "|") {
+				// Remove the | prefix and trim leading whitespace
+				continuation := strings.TrimSpace(nextLine[1:])
+				if continuation != "" {
+					fullCommand += " " + continuation
+				}
+				i++ // Skip this line in the outer loop
+			} else {
+				break
+			}
+		}
+
 		// Parse the command line using PEG grammar
-		result, ok, _ := parser.Parse(grammar.commandElements, trimmedLine, p.WithErrors())
+		result, ok, _ := parser.Parse(grammar.commandElements, fullCommand, p.WithErrors())
 
 		var elements []CommandElement
 		if ok && result != nil {
@@ -939,11 +957,11 @@ func parseCommands(content string) []Command {
 				elements = elems
 			} else {
 				// Fallback to simple string if parsing fails
-				elements = []CommandElement{StringElement{Value: trimmedLine}}
+				elements = []CommandElement{StringElement{Value: fullCommand}}
 			}
 		} else {
 			// If parsing fails, treat the whole line as a string
-			elements = []CommandElement{StringElement{Value: trimmedLine}}
+			elements = []CommandElement{StringElement{Value: fullCommand}}
 		}
 
 		cmd := Command{
