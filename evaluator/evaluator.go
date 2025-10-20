@@ -178,6 +178,11 @@ func (e *Evaluator) executeCommand(cmd parser.Command) error {
 
 // executeCommandWithPosition runs a single command with position info
 func (e *Evaluator) executeCommandWithPosition(cmd parser.Command, isLast bool) error {
+	// Check if this is an @echo command - use native printer instead of shell
+	if cmd.Silent && e.isEchoCommand(cmd) {
+		return e.executeNativeEcho(cmd)
+	}
+
 	// Convert command to string
 	cmdStr := e.commandToString(cmd)
 
@@ -204,6 +209,142 @@ func (e *Evaluator) executeCommandWithPosition(cmd parser.Command, isLast bool) 
 	}
 
 	return nil
+}
+
+// isEchoCommand checks if a command is an echo command
+func (e *Evaluator) isEchoCommand(cmd parser.Command) bool {
+	if len(cmd.Elements) == 0 {
+		return false
+	}
+
+	// Check if the first element is "echo"
+	first := cmd.Elements[0]
+	if str, ok := first.(parser.StringElement); ok {
+		trimmed := strings.TrimSpace(str.Value)
+		// Check if it's exactly "echo" or starts with "echo "
+		return trimmed == "echo" || strings.HasPrefix(trimmed, "echo ")
+	}
+
+	return false
+}
+
+// executeNativeEcho executes an echo command using native Go printing
+func (e *Evaluator) executeNativeEcho(cmd parser.Command) error {
+	if len(cmd.Elements) == 0 {
+		fmt.Printf("%s\n", color.FaintText("│"))
+		return nil
+	}
+
+	var output strings.Builder
+
+	for i, elem := range cmd.Elements {
+		switch el := elem.(type) {
+		case parser.StringElement:
+			val := el.Value
+			// Skip "echo " prefix from the first element
+			if i == 0 {
+				trimmed := strings.TrimSpace(val)
+				if trimmed == "echo" {
+					continue
+				} else if strings.HasPrefix(trimmed, "echo ") {
+					// Remove "echo " prefix
+					val = strings.TrimPrefix(val, "echo ")
+					val = strings.TrimLeft(val, " \t")
+				}
+			}
+
+			// Handle quotes - strip leading/trailing quotes but preserve content
+			val = e.stripQuotesForEcho(val, i == 1 || (i == 0 && !strings.HasPrefix(strings.TrimSpace(el.Value), "echo")))
+			output.WriteString(val)
+		case parser.VariableElement:
+			// Resolve variable
+			if val, ok := e.env[el.Name]; ok {
+				output.WriteString(val)
+			} else if val, ok := os.LookupEnv(el.Name); ok {
+				output.WriteString(val)
+			}
+			// If variable not found, don't output anything (bash behavior)
+		case parser.BacktickElement:
+			// For native echo, we could execute the backtick command
+			// but for simplicity, we'll fall back to the full command string
+			// This is an edge case that's less common with @echo
+			cmdStr := e.commandToString(cmd)
+			// Remove the "echo " prefix
+			cmdStr = strings.TrimSpace(strings.TrimPrefix(cmdStr, "echo"))
+			fmt.Printf("%s %s\n", color.FaintText("│"), cmdStr)
+			return nil
+		case parser.ExpressionElement:
+			// Evaluate the expression
+			val := e.expressionToString(el.Expression)
+			output.WriteString(val)
+		}
+	}
+
+	// Print with colored pipe prefix
+	fmt.Printf("%s %s\n", color.FaintText("│"), output.String())
+	return nil
+}
+
+// stripQuotesForEcho removes quotes and expands variables for echo command
+func (e *Evaluator) stripQuotesForEcho(s string, isFirstArg bool) string {
+	// If this is a complete quoted string (has both opening and closing quotes)
+	// Only trim whitespace outside the quotes
+	trimmed := strings.TrimSpace(s)
+	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' {
+		return e.expandShellVariables(trimmed[1 : len(trimmed)-1])
+	} else if len(trimmed) >= 2 && trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'' {
+		// Single quotes - no variable expansion
+		return trimmed[1 : len(trimmed)-1]
+	}
+
+	// For partial strings (quote split across elements), don't trim internal whitespace
+	// Strip leading quote if present
+	if len(s) > 0 && (s[0] == '"' || s[0] == '\'') {
+		s = s[1:]
+	}
+
+	// Strip trailing quote if present
+	if len(s) > 0 && (s[len(s)-1] == '"' || s[len(s)-1] == '\'') {
+		s = s[:len(s)-1]
+	}
+
+	// Expand variables for double-quoted context
+	return e.expandShellVariables(s)
+}
+
+// unquoteString removes surrounding quotes and expands shell variables
+func (e *Evaluator) unquoteString(s string) string {
+	s = strings.TrimSpace(s)
+
+	// Remove surrounding double quotes
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+		// Expand variables in double-quoted strings
+		s = e.expandShellVariables(s)
+	} else if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
+		// Remove surrounding single quotes (no variable expansion in single quotes)
+		s = s[1 : len(s)-1]
+	} else {
+		// No quotes, still expand variables
+		s = e.expandShellVariables(s)
+	}
+
+	return s
+}
+
+// expandShellVariables expands ${VAR} and $VAR syntax
+func (e *Evaluator) expandShellVariables(s string) string {
+	// Expand ${VAR} syntax
+	result := os.Expand(s, func(key string) string {
+		// Check evaluator environment first
+		if val, ok := e.env[key]; ok {
+			return val
+		}
+		// Fall back to system environment
+		return os.Getenv(key)
+	})
+
+	return result
 }
 
 // commandToString converts a command to an executable string
