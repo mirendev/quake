@@ -31,13 +31,15 @@ func realMain() int {
 	var listTasks bool
 	var verbose bool
 	var generateTask bool
+	var quakefilePath string
 	flag.BoolVar(&listTasks, "l", false, "List all tasks with their documentation")
 	flag.BoolVar(&verbose, "v", false, "Verbose output (show source file locations with -l)")
 	flag.BoolVar(&generateTask, "g", false, "Generate a new task using Claude AI")
+	flag.StringVar(&quakefilePath, "f", "", "Path to Quakefile (default: search for Quakefile in current and parent directories)")
 	flag.Parse()
 
 	if generateTask {
-		if err := generateTaskWithClaude(); err != nil {
+		if err := generateTaskWithClaude(quakefilePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return 1
 		}
@@ -45,7 +47,7 @@ func realMain() int {
 	}
 
 	if listTasks {
-		if err := listAllTasks(verbose); err != nil {
+		if err := listAllTasks(verbose, quakefilePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return 1
 		}
@@ -76,7 +78,7 @@ func realMain() int {
 
 	// If no tasks specified, run default
 	if len(taskGroups) == 0 {
-		if err := runTask("", nil); err != nil {
+		if err := runTask("", nil, quakefilePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return 1
 		}
@@ -91,7 +93,7 @@ func realMain() int {
 			taskArgs = group[1:]
 		}
 
-		if err := runTask(taskName, taskArgs); err != nil {
+		if err := runTask(taskName, taskArgs, quakefilePath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			return 1
 		}
@@ -280,7 +282,25 @@ func loadAllQuakefiles(mainPath string) (parser.QuakeFile, error) {
 }
 
 // findQuakefile searches for a Quakefile in the current directory and parent directories
-func findQuakefile() (string, error) {
+// If customPath is provided, it validates and returns that path instead
+func findQuakefile(customPath string) (string, error) {
+	// If a custom path was provided, use it
+	if customPath != "" {
+		// Convert to absolute path if relative
+		absPath, err := filepath.Abs(customPath)
+		if err != nil {
+			return "", fmt.Errorf("invalid path %s: %w", customPath, err)
+		}
+
+		// Check if file exists
+		if _, err := os.Stat(absPath); err != nil {
+			return "", fmt.Errorf("Quakefile not found at %s: %w", absPath, err)
+		}
+
+		return absPath, nil
+	}
+
+	// Default behavior: search current and parent directories
 	dir, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -303,9 +323,9 @@ func findQuakefile() (string, error) {
 	return "", fmt.Errorf("no Quakefile found in current directory or any parent directory")
 }
 
-func listAllTasks(verbose bool) error {
+func listAllTasks(verbose bool, customPath string) error {
 	// Look for Quakefile in current or parent directories
-	quakefilePath, err := findQuakefile()
+	quakefilePath, err := findQuakefile(customPath)
 	if err != nil {
 		return err
 	}
@@ -405,9 +425,9 @@ func getFirstLine(description string) string {
 	return ""
 }
 
-func runTask(taskName string, args []string) error {
+func runTask(taskName string, args []string, customPath string) error {
 	// Look for Quakefile in current or parent directories
-	quakefilePath, err := findQuakefile()
+	quakefilePath, err := findQuakefile(customPath)
 	if err != nil {
 		return err
 	}
@@ -497,7 +517,7 @@ func extractTaskFromOutput(output string) string {
 }
 
 // generateTaskWithClaude prompts the user for a task description and uses Claude to generate it
-func generateTaskWithClaude() error {
+func generateTaskWithClaude(customPath string) error {
 	// Check if claude CLI is available
 	claudePath, err := exec.LookPath("claude")
 	if err != nil {
@@ -537,7 +557,7 @@ func generateTaskWithClaude() error {
 	}
 
 	// Find the Quakefile
-	quakefilePath, err := findQuakefile()
+	quakefilePath, err := findQuakefile(customPath)
 	if err != nil {
 		return err
 	}
