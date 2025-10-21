@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"flag"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"miren.dev/mflags"
 	"miren.dev/quake/evaluator"
 	"miren.dev/quake/internal/gotasks"
 	"miren.dev/quake/parser"
@@ -33,12 +34,22 @@ func realMain() int {
 	var generateTask bool
 	var initQuakefile bool
 	var quakefilePath string
-	flag.BoolVar(&listTasks, "l", false, "List all tasks with their documentation")
-	flag.BoolVar(&verbose, "v", false, "Verbose output (show source file locations with -l)")
-	flag.BoolVar(&generateTask, "g", false, "Generate a new task using Claude AI")
-	flag.BoolVar(&initQuakefile, "init", false, "Initialize a new Quakefile using Claude AI")
-	flag.StringVar(&quakefilePath, "f", "", "Path to Quakefile (default: search for Quakefile in current and parent directories)")
-	flag.Parse()
+
+	flags := mflags.NewFlagSet("quake")
+	flags.BoolVar(&listTasks, "list", 'l', false, "List all tasks with their documentation")
+	flags.BoolVar(&verbose, "", 'v', false, "Verbose output (show source file locations with -l)")
+	flags.BoolVar(&generateTask, "generate", 'g', false, "Generate a new task using Claude AI")
+	flags.BoolVar(&initQuakefile, "init", 0, false, "Initialize a new Quakefile using Claude AI")
+	flags.StringVar(&quakefilePath, "file", 'f', "", "Path to Quakefile (default: search for Quakefile in current and parent directories)")
+
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		if errors.Is(err, mflags.ErrHelp) {
+			return 1
+		}
+
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	if initQuakefile {
 		if err := initQuakefileWithClaude(); err != nil {
@@ -65,7 +76,7 @@ func realMain() int {
 	}
 
 	// Parse arguments to support multiple tasks separated by --
-	args := flag.Args()
+	args := flags.Args()
 
 	// Split arguments into groups separated by --
 	var taskGroups [][]string
@@ -674,20 +685,20 @@ func analyzeProjectContext() (string, error) {
 
 	// Detect build system and configuration files
 	buildFiles := []string{
-		"go.mod",          // Go
-		"package.json",    // Node.js
-		"Cargo.toml",      // Rust
-		"pom.xml",         // Maven (Java)
-		"build.gradle",    // Gradle (Java/Kotlin)
-		"Makefile",        // Make
-		"CMakeLists.txt",  // CMake (C/C++)
-		"setup.py",        // Python
-		"pyproject.toml",  // Python
-		"Gemfile",         // Ruby
-		"composer.json",   // PHP
-		"build.sbt",       // Scala
-		"mix.exs",         // Elixir
-		"Dockerfile",      // Docker
+		"go.mod",             // Go
+		"package.json",       // Node.js
+		"Cargo.toml",         // Rust
+		"pom.xml",            // Maven (Java)
+		"build.gradle",       // Gradle (Java/Kotlin)
+		"Makefile",           // Make
+		"CMakeLists.txt",     // CMake (C/C++)
+		"setup.py",           // Python
+		"pyproject.toml",     // Python
+		"Gemfile",            // Ruby
+		"composer.json",      // PHP
+		"build.sbt",          // Scala
+		"mix.exs",            // Elixir
+		"Dockerfile",         // Docker
 		"docker-compose.yml", // Docker Compose
 	}
 
@@ -717,11 +728,11 @@ func analyzeProjectContext() (string, error) {
 		if info.IsDir() {
 			name := filepath.Base(path)
 			if strings.HasPrefix(name, ".") ||
-			   name == "node_modules" ||
-			   name == "vendor" ||
-			   name == "target" ||
-			   name == "build" ||
-			   name == "dist" {
+				name == "node_modules" ||
+				name == "vendor" ||
+				name == "target" ||
+				name == "build" ||
+				name == "dist" {
 				return filepath.SkipDir
 			}
 			// Only go 3 levels deep
