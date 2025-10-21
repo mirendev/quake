@@ -20,10 +20,69 @@ type Evaluator struct {
 
 // New creates a new evaluator
 func New(quakefile *parser.QuakeFile) *Evaluator {
-	return &Evaluator{
+	e := &Evaluator{
 		quakefile: quakefile,
 		env:       make(map[string]string),
 	}
+	// Load global variables into the environment
+	e.loadGlobalVariables()
+	return e
+}
+
+// loadGlobalVariables loads top-level variables from the Quakefile into the environment
+func (e *Evaluator) loadGlobalVariables() {
+	for _, variable := range e.quakefile.Variables {
+		value := e.evaluateVariable(variable)
+		e.env[variable.Name] = value
+	}
+}
+
+// evaluateVariable evaluates a variable's value based on its type
+func (e *Evaluator) evaluateVariable(variable parser.Variable) string {
+	// Handle command substitution (backticks)
+	if variable.CommandSubstitution {
+		if cmdStr, ok := variable.Value.(string); ok {
+			// Remove the backticks from the command string
+			cmdStr = strings.Trim(cmdStr, "`")
+			// Execute the command and capture output
+			cmd := exec.Command("sh", "-c", cmdStr)
+			output, err := cmd.Output()
+			if err != nil {
+				// If command fails, return empty string
+				return ""
+			}
+			// Trim whitespace from output
+			return strings.TrimSpace(string(output))
+		}
+		return ""
+	}
+
+	// Handle expressions ({{...}})
+	if variable.IsExpression {
+		if expr, ok := variable.Value.(parser.Expression); ok {
+			return e.expressionToString(expr)
+		}
+		return ""
+	}
+
+	// Handle plain string values
+	if str, ok := variable.Value.(string); ok {
+		// Check if it's a quoted string and unquote it
+		str = strings.TrimSpace(str)
+		if len(str) >= 2 && str[0] == '"' && str[len(str)-1] == '"' {
+			// Remove surrounding quotes
+			str = str[1 : len(str)-1]
+			// Unescape common escape sequences
+			str = strings.ReplaceAll(str, "\\\"", "\"")
+			str = strings.ReplaceAll(str, "\\\\", "\\")
+			str = strings.ReplaceAll(str, "\\n", "\n")
+			str = strings.ReplaceAll(str, "\\t", "\t")
+		}
+		// Expand any variable references within the string value
+		return e.expandShellVariables(str)
+	}
+
+	return ""
 }
 
 // RunTask executes a specific task by name (without arguments)
