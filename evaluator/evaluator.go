@@ -347,14 +347,13 @@ func (e *Evaluator) executeNativeEcho(cmd parser.Command) error {
 // stripQuotesForEcho removes quotes and expands variables for echo command
 // It handles multiple quoted sections within a single string
 func (e *Evaluator) stripQuotesForEcho(s string, isFirstArg bool) string {
-	trimmed := strings.TrimSpace(s)
-
+	// Don't trim! We need to preserve spaces inside quotes
 	// If the entire string is a single quoted section, handle it simply
-	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' && !strings.Contains(trimmed[1:len(trimmed)-1], "\"") {
-		return e.expandShellVariables(trimmed[1 : len(trimmed)-1])
-	} else if len(trimmed) >= 2 && trimmed[0] == '\'' && trimmed[len(trimmed)-1] == '\'' && !strings.Contains(trimmed[1:len(trimmed)-1], "'") {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' && !strings.Contains(s[1:len(s)-1], "\"") {
+		return e.expandShellVariables(s[1 : len(s)-1])
+	} else if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' && !strings.Contains(s[1:len(s)-1], "'") {
 		// Single quotes - no variable expansion
-		return trimmed[1 : len(trimmed)-1]
+		return s[1 : len(s)-1]
 	}
 
 	// Handle strings with multiple quoted sections or mixed quoted/unquoted parts
@@ -363,8 +362,8 @@ func (e *Evaluator) stripQuotesForEcho(s string, isFirstArg bool) string {
 	inDoubleQuote := false
 	inSingleQuote := false
 
-	for i := 0; i < len(trimmed); i++ {
-		ch := trimmed[i]
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
 
 		if ch == '"' && !inSingleQuote {
 			// Toggle double quote state, but don't include the quote character
