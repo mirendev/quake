@@ -905,7 +905,7 @@ Variables in Quakefile work differently than shell variables!
 1. DEFINING variables (at top level, outside tasks):
    - String literals: VERSION = "1.0.0"
    - Command substitution: GIT_COMMIT = `+"`git rev-parse HEAD`"+`
-   - Expressions: BUILD_TIME = `+"`date -u +\"%Y-%m-%dT%H:%M:%SZ\"`"+`
+   - Expressions: BUILD_TIME = `+"`date -u +\"%%Y-%%m-%%dT%%H:%%M:%%SZ\"`"+`
 
 2. REFERENCING variables in shell commands (inside tasks):
    - Use $VAR for Quakefile variables: echo "Version: $VERSION"
