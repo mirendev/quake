@@ -1,0 +1,145 @@
+# Quakefile for quake build system
+# Go-based build tool project
+
+# Variables
+VERSION = `git describe --tags --always --dirty 2>/dev/null || echo "dev"`
+BUILD_DIR = "build"
+BINARY = "quake"
+GO_FILES = `find . -name '*.go' -not -path './vendor/*'`
+
+# Default task - build the project
+task default => build
+
+# Build the quake binary
+task build => test {
+    @echo "Building $BINARY $VERSION..."
+    mkdir -p $BUILD_DIR
+    go build -ldflags "-X main.version=$VERSION" -o $BUILD_DIR/$BINARY .
+    @echo "Build complete: $BUILD_DIR/$BINARY"
+}
+
+# Build for all platforms
+task build-all => test {
+    @echo "Building for multiple platforms..."
+    mkdir -p $BUILD_DIR
+    GOOS=linux GOARCH=amd64 go build -ldflags "-X main.version=$VERSION" -o $BUILD_DIR/$BINARY-linux-amd64 .
+    GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.version=$VERSION" -o $BUILD_DIR/$BINARY-darwin-amd64 .
+    GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.version=$VERSION" -o $BUILD_DIR/$BINARY-darwin-arm64 .
+    GOOS=windows GOARCH=amd64 go build -ldflags "-X main.version=$VERSION" -o $BUILD_DIR/$BINARY-windows-amd64.exe .
+    @echo "Cross-platform builds complete"
+}
+
+# Run tests
+task test {
+    @echo "Running tests..."
+    go test -v ./...
+}
+
+# Run tests with coverage
+task test-coverage {
+    @echo "Running tests with coverage..."
+    go test -v -coverprofile=coverage.out ./...
+    go tool cover -html=coverage.out -o coverage.html
+    @echo "Coverage report: coverage.html"
+}
+
+# Run linter
+task lint {
+    @echo "Running linter..."
+    -which golangci-lint > /dev/null || (echo "golangci-lint not installed. Install from https://golangci-lint.run/usage/install/" && exit 1)
+    golangci-lint run ./...
+}
+
+# Format code
+task fmt {
+    @echo "Formatting Go code..."
+    go fmt ./...
+    gofmt -s -w .
+}
+
+# Vet code for suspicious constructs
+task vet {
+    @echo "Running go vet..."
+    go vet ./...
+}
+
+# Run all quality checks
+task check => fmt, vet, lint, test
+
+# Install the binary to GOPATH/bin
+task install => build {
+    @echo "Installing $BINARY..."
+    go install -ldflags "-X main.version=$VERSION" .
+    @echo "Installed to $(go env GOPATH)/bin/$BINARY"
+}
+
+# Clean build artifacts
+task clean {
+    @echo "Cleaning build artifacts..."
+    rm -rf $BUILD_DIR
+    rm -f coverage.out coverage.html
+    @echo "Clean complete"
+}
+
+# Run the binary (development mode)
+task run {
+    go run . {{args}}
+}
+
+# Download dependencies
+task deps {
+    @echo "Downloading dependencies..."
+    go mod download
+    go mod tidy
+}
+
+# Update dependencies
+task deps-update {
+    @echo "Updating dependencies..."
+    go get -u ./...
+    go mod tidy
+}
+
+# Show project information
+task info {
+    @echo "Project: quake"
+    @echo "Version: $VERSION"
+    @echo "Go version: $(go version)"
+    @echo "Build directory: $BUILD_DIR"
+}
+
+# Development namespace
+namespace dev {
+    # Watch and rebuild on changes (requires entr)
+    task watch {
+        @echo "Watching for changes... (requires 'entr' command)"
+        find . -name '*.go' | entr -c make build
+    }
+    
+    # Quick build without tests
+    task quick {
+        @echo "Quick build (no tests)..."
+        mkdir -p $BUILD_DIR
+        go build -o $BUILD_DIR/$BINARY .
+    }
+}
+
+# Release namespace
+namespace release {
+    # Create a new release
+    task prepare(tag) => check {
+        @echo "Preparing release $tag..."
+        git tag -a $tag -m "Release $tag"
+        @echo "Tagged $tag. Push with: git push origin $tag"
+    }
+    
+    # Build release binaries
+    task build => build-all {
+        @echo "Creating release archives..."
+        cd $BUILD_DIR && tar czf $BINARY-linux-amd64.tar.gz $BINARY-linux-amd64
+        cd $BUILD_DIR && tar czf $BINARY-darwin-amd64.tar.gz $BINARY-darwin-amd64
+        cd $BUILD_DIR && tar czf $BINARY-darwin-arm64.tar.gz $BINARY-darwin-arm64
+        cd $BUILD_DIR && zip $BINARY-windows-amd64.zip $BINARY-windows-amd64.exe
+        @echo "Release archives created in $BUILD_DIR"
+    }
+}
