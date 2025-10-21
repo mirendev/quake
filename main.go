@@ -31,12 +31,22 @@ func realMain() int {
 	var listTasks bool
 	var verbose bool
 	var generateTask bool
+	var initQuakefile bool
 	var quakefilePath string
 	flag.BoolVar(&listTasks, "l", false, "List all tasks with their documentation")
 	flag.BoolVar(&verbose, "v", false, "Verbose output (show source file locations with -l)")
 	flag.BoolVar(&generateTask, "g", false, "Generate a new task using Claude AI")
+	flag.BoolVar(&initQuakefile, "init", false, "Initialize a new Quakefile using Claude AI")
 	flag.StringVar(&quakefilePath, "f", "", "Path to Quakefile (default: search for Quakefile in current and parent directories)")
 	flag.Parse()
+
+	if initQuakefile {
+		if err := initQuakefileWithClaude(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			return 1
+		}
+		return 0
+	}
 
 	if generateTask {
 		if err := generateTaskWithClaude(quakefilePath); err != nil {
@@ -649,5 +659,357 @@ Requirements:
 	}
 
 	fmt.Printf("✅ Task added to %s\n", quakefilePath)
+	return nil
+}
+
+// analyzeProjectContext examines the current directory to gather context about the project
+func analyzeProjectContext() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	var analysis strings.Builder
+	analysis.WriteString("PROJECT ANALYSIS:\n\n")
+
+	// Detect build system and configuration files
+	buildFiles := []string{
+		"go.mod",          // Go
+		"package.json",    // Node.js
+		"Cargo.toml",      // Rust
+		"pom.xml",         // Maven (Java)
+		"build.gradle",    // Gradle (Java/Kotlin)
+		"Makefile",        // Make
+		"CMakeLists.txt",  // CMake (C/C++)
+		"setup.py",        // Python
+		"pyproject.toml",  // Python
+		"Gemfile",         // Ruby
+		"composer.json",   // PHP
+		"build.sbt",       // Scala
+		"mix.exs",         // Elixir
+		"Dockerfile",      // Docker
+		"docker-compose.yml", // Docker Compose
+	}
+
+	var detectedFiles []string
+	for _, file := range buildFiles {
+		if _, err := os.Stat(filepath.Join(cwd, file)); err == nil {
+			detectedFiles = append(detectedFiles, file)
+		}
+	}
+
+	if len(detectedFiles) > 0 {
+		analysis.WriteString("Detected build/config files:\n")
+		for _, file := range detectedFiles {
+			analysis.WriteString(fmt.Sprintf("  - %s\n", file))
+		}
+		analysis.WriteString("\n")
+	}
+
+	// Detect programming languages by file extensions
+	languageFiles := make(map[string]int)
+	err = filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+
+		// Skip hidden directories and common ignore patterns
+		if info.IsDir() {
+			name := filepath.Base(path)
+			if strings.HasPrefix(name, ".") ||
+			   name == "node_modules" ||
+			   name == "vendor" ||
+			   name == "target" ||
+			   name == "build" ||
+			   name == "dist" {
+				return filepath.SkipDir
+			}
+			// Only go 3 levels deep
+			relPath, _ := filepath.Rel(cwd, path)
+			if strings.Count(relPath, string(os.PathSeparator)) > 3 {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Count files by extension
+		ext := filepath.Ext(path)
+		if ext != "" {
+			languageFiles[ext]++
+		}
+		return nil
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to analyze project structure: %w", err)
+	}
+
+	// Map extensions to languages
+	extensionToLanguage := map[string]string{
+		".go":    "Go",
+		".js":    "JavaScript",
+		".ts":    "TypeScript",
+		".py":    "Python",
+		".rb":    "Ruby",
+		".rs":    "Rust",
+		".java":  "Java",
+		".kt":    "Kotlin",
+		".c":     "C",
+		".cpp":   "C++",
+		".h":     "C/C++ headers",
+		".cs":    "C#",
+		".php":   "PHP",
+		".swift": "Swift",
+		".m":     "Objective-C",
+		".scala": "Scala",
+		".ex":    "Elixir",
+		".exs":   "Elixir",
+	}
+
+	if len(languageFiles) > 0 {
+		analysis.WriteString("Detected programming languages (by file count):\n")
+		// Sort by count
+		type langCount struct {
+			lang  string
+			count int
+		}
+		var langs []langCount
+		for ext, count := range languageFiles {
+			if lang, ok := extensionToLanguage[ext]; ok && count > 0 {
+				langs = append(langs, langCount{lang, count})
+			}
+		}
+		// Simple sort by count (descending)
+		for i := 0; i < len(langs); i++ {
+			for j := i + 1; j < len(langs); j++ {
+				if langs[j].count > langs[i].count {
+					langs[i], langs[j] = langs[j], langs[i]
+				}
+			}
+		}
+		for _, lc := range langs {
+			analysis.WriteString(fmt.Sprintf("  - %s (%d files)\n", lc.lang, lc.count))
+		}
+		analysis.WriteString("\n")
+	}
+
+	// List top-level directory structure
+	entries, err := os.ReadDir(cwd)
+	if err != nil {
+		return "", fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	var dirs []string
+	var files []string
+	for _, entry := range entries {
+		name := entry.Name()
+		// Skip hidden files and common directories
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		if entry.IsDir() {
+			dirs = append(dirs, name+"/")
+		} else {
+			files = append(files, name)
+		}
+	}
+
+	if len(dirs) > 0 || len(files) > 0 {
+		analysis.WriteString("Top-level directory structure:\n")
+		for _, dir := range dirs {
+			analysis.WriteString(fmt.Sprintf("  %s\n", dir))
+		}
+		for _, file := range files {
+			analysis.WriteString(fmt.Sprintf("  %s\n", file))
+		}
+	}
+
+	return analysis.String(), nil
+}
+
+// initQuakefileWithClaude analyzes the project and uses Claude to generate an initial Quakefile
+func initQuakefileWithClaude() error {
+	// Check if a Quakefile already exists
+	existingPath, err := findQuakefile("")
+	if err == nil {
+		// A Quakefile was found
+		cwd, _ := os.Getwd()
+		relPath, _ := filepath.Rel(cwd, existingPath)
+		if relPath == "" {
+			relPath = existingPath
+		}
+		return fmt.Errorf("a Quakefile already exists at %s\nRemove it first or use 'quake -g' to add tasks to it", relPath)
+	}
+
+	// Check if claude CLI is available
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		// Try common locations
+		possiblePaths := []string{
+			"/usr/local/bin/claude",
+			"/usr/bin/claude",
+			filepath.Join(os.Getenv("HOME"), "bin", "claude"),
+			filepath.Join(os.Getenv("HOME"), ".local", "bin", "claude"),
+		}
+
+		found := false
+		for _, path := range possiblePaths {
+			if _, err := os.Stat(path); err == nil {
+				claudePath = path
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("claude CLI not found. Please ensure 'claude' is installed and in your PATH")
+		}
+	}
+
+	fmt.Println("Analyzing project structure...")
+
+	// Analyze the project
+	projectContext, err := analyzeProjectContext()
+	if err != nil {
+		return fmt.Errorf("failed to analyze project: %w", err)
+	}
+
+	// Create the prompt for Claude
+	prompt := fmt.Sprintf(`You are a helpful assistant that creates Quakefile build system configurations.
+
+QUAKEFILE SYNTAX RULES:
+1. Tasks are defined with: task <name> { ... }
+2. Tasks can have dependencies: task build => test { ... }
+3. Tasks can have arguments: task deploy(environment) { ... }
+4. Tasks can have both: task deploy(env) => build, test { ... }
+5. Commands in tasks are shell commands, one per line
+6. Comments start with #
+7. Silent commands start with @
+8. Continue on error with -
+9. Tasks can be organized in namespaces: namespace docker { task build { ... } }
+
+VARIABLE USAGE (IMPORTANT):
+Variables in Quakefile work differently than shell variables!
+
+1. DEFINING variables (at top level, outside tasks):
+   - String literals: VERSION = "1.0.0"
+   - Command substitution: GIT_COMMIT = `+"`git rev-parse HEAD`"+`
+   - Expressions: BUILD_TIME = `+"`date -u +\"%Y-%m-%dT%H:%M:%SZ\"`"+`
+
+2. REFERENCING variables in shell commands (inside tasks):
+   - Use $VAR for Quakefile variables: echo "Version: $VERSION"
+   - Use ${VAR} for environment variables: echo "User: ${USER}"
+   - Use {{expression}} for complex expressions: NAME = {{name || "default"}}
+   - Use {{env.VAR}} for environment variables: DB_NAME = {{env.DB_NAME || "myapp_dev"}}
+
+3. EXAMPLES:
+   Good:
+     VERSION = "1.0.0"
+     task version {
+         echo "Version: $VERSION"
+     }
+
+   Good:
+     PROJECT = "myapp"
+     BUILD_DIR = "build"
+     task build {
+         mkdir -p $BUILD_DIR
+         go build -o $BUILD_DIR/$PROJECT
+     }
+
+   Good (with command substitution):
+     GIT_COMMIT = `+"`git rev-parse HEAD`"+`
+     task info {
+         echo "Commit: $GIT_COMMIT"
+     }
+
+   Bad (don't mix shell variable syntax):
+     VERSION="1.0.0"  # Wrong - this is shell syntax, not Quakefile
+     task build {
+         VERSION="1.0.0"  # Wrong - define variables at top level
+         echo $VERSION
+     }
+
+COMMON TASK PATTERNS:
+- Default task: task default { ... } or task default => build
+- Build/compile tasks with dependencies on lint/test
+- Clean tasks to remove build artifacts
+- Test tasks with coverage options
+- Lint/format tasks for code quality
+- Run/watch tasks for development
+- Deploy tasks with environment arguments
+- Docker tasks in docker namespace
+- Database tasks in db namespace
+
+%s
+
+Please generate a comprehensive initial Quakefile for this project.
+
+Requirements:
+- Output ONLY the Quakefile content, no explanations or markdown
+- Create appropriate tasks based on the detected project type
+- Include a helpful default task
+- Add descriptive comments for each task
+- Use appropriate dependencies between tasks
+- Include common development workflows (build, test, run, clean, etc.)
+- Follow best practices for the detected languages and tools
+- Use namespaces for logical grouping when appropriate
+- Make it production-ready and useful from day one`, projectContext)
+
+	// Execute claude with the prompt
+	cmd := exec.Command(claudePath, "-p")
+	cmd.Stdin = strings.NewReader(prompt)
+	cmd.Stderr = os.Stderr
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	fmt.Println("Generating Quakefile with Claude...")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to run claude: %w", err)
+	}
+
+	// Extract the Quakefile from the output
+	generatedQuakefile := extractTaskFromOutput(out.String())
+	if generatedQuakefile == "" {
+		return fmt.Errorf("claude returned empty response or no valid Quakefile found")
+	}
+
+	// Show the generated Quakefile to the user
+	fmt.Println("\nGenerated Quakefile:")
+	fmt.Println("---")
+	fmt.Println(generatedQuakefile)
+	fmt.Println("---")
+
+	// Ask for confirmation
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("\nCreate this Quakefile? (y/n): ")
+	confirmation, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read confirmation: %w", err)
+	}
+	confirmation = strings.ToLower(strings.TrimSpace(confirmation))
+
+	if confirmation != "y" && confirmation != "yes" {
+		fmt.Println("Quakefile not created.")
+		return nil
+	}
+
+	// Write the Quakefile to the current directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	quakefilePath := filepath.Join(cwd, "Quakefile")
+	if err := os.WriteFile(quakefilePath, []byte(generatedQuakefile), 0644); err != nil {
+		return fmt.Errorf("failed to write Quakefile: %w", err)
+	}
+
+	fmt.Printf("\n✅ Quakefile created at %s\n", quakefilePath)
+	fmt.Println("\nNext steps:")
+	fmt.Println("  quake -l          # List available tasks")
+	fmt.Println("  quake <task>      # Run a specific task")
+	fmt.Println("  quake             # Run the default task")
 	return nil
 }
