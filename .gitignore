@@ -1,4 +1,11 @@
 quake
 
 # nix build output
-result 
+result
+
+# direnv cache
+.direnv/
+
+# test/build artifacts
+coverage.out
+coverage.html
