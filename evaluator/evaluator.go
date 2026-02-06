@@ -464,8 +464,7 @@ func (e *Evaluator) expressionToString(expr parser.Expression) string {
 	case parser.StringLiteral:
 		return ex.Value
 	case parser.AccessId:
-		switch fmt.Sprint(ex.Object) {
-		case "env":
+		if id, ok := ex.Object.(parser.Identifier); ok && id.Name == "env" {
 			// Look up in environment
 			if val, ok := e.env[ex.Property]; ok {
 				return val
